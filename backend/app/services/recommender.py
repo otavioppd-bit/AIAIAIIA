@@ -12,7 +12,6 @@ Encoding vocabulary used throughout:
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -360,7 +359,6 @@ def _composition_rules(
 
         dim = breakdown["dimension"]
         metric = breakdown.get("metric")
-        metric_label = metric or "registros"
 
         if 2 <= distinct <= 6:
             out.append(
@@ -744,7 +742,6 @@ def _derived_kpis(
 ) -> list[dict[str, Any]]:
     """Domain-aware derived KPIs (only when the inputs genuinely exist)."""
     out: list[dict[str, Any]] = []
-    columns = {c["name"]: c for c in profile["columns"]}
     money = [
         c for c in profile["columns"]
         if c["semantic_type"] == sem.CURRENCY

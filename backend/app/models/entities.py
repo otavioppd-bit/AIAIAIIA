@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -29,7 +29,7 @@ def _uuid() -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class TimestampMixin:
@@ -59,13 +59,13 @@ class User(Base, TimestampMixin):
     preferred_theme: Mapped[str] = mapped_column(String(32), default="dark")
     locale: Mapped[str] = mapped_column(String(8), default="pt-BR")
 
-    datasets: Mapped[list["Dataset"]] = relationship(
+    datasets: Mapped[list[Dataset]] = relationship(
         back_populates="owner", cascade="all, delete-orphan"
     )
-    dashboards: Mapped[list["Dashboard"]] = relationship(
+    dashboards: Mapped[list[Dashboard]] = relationship(
         back_populates="owner", cascade="all, delete-orphan"
     )
-    conversations: Mapped[list["Conversation"]] = relationship(
+    conversations: Mapped[list[Conversation]] = relationship(
         back_populates="owner", cascade="all, delete-orphan"
     )
 
@@ -98,13 +98,13 @@ class Dataset(Base, TimestampMixin):
     analysis: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     owner: Mapped[User] = relationship(back_populates="datasets")
-    dashboards: Mapped[list["Dashboard"]] = relationship(
+    dashboards: Mapped[list[Dashboard]] = relationship(
         back_populates="dataset", cascade="all, delete-orphan"
     )
-    conversations: Mapped[list["Conversation"]] = relationship(
+    conversations: Mapped[list[Conversation]] = relationship(
         back_populates="dataset", cascade="all, delete-orphan"
     )
-    reports: Mapped[list["Report"]] = relationship(
+    reports: Mapped[list[Report]] = relationship(
         back_populates="dataset", cascade="all, delete-orphan"
     )
 
@@ -127,7 +127,7 @@ class Dashboard(Base, TimestampMixin):
 
     owner: Mapped[User] = relationship(back_populates="dashboards")
     dataset: Mapped[Dataset] = relationship(back_populates="dashboards")
-    versions: Mapped[list["DashboardVersion"]] = relationship(
+    versions: Mapped[list[DashboardVersion]] = relationship(
         back_populates="dashboard",
         cascade="all, delete-orphan",
         order_by="desc(DashboardVersion.version)",
@@ -166,7 +166,7 @@ class Conversation(Base, TimestampMixin):
 
     owner: Mapped[User] = relationship(back_populates="conversations")
     dataset: Mapped[Dataset] = relationship(back_populates="conversations")
-    messages: Mapped[list["Message"]] = relationship(
+    messages: Mapped[list[Message]] = relationship(
         back_populates="conversation",
         cascade="all, delete-orphan",
         order_by="Message.created_at",

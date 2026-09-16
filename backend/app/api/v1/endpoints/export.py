@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
@@ -12,8 +12,7 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, ReadyDataset, load_dataset_frame
 from app.core.errors import NotFoundError
-from app.models import Dashboard, Report
-from app.services import insights as insights_mod
+from app.models import Report
 from app.services import semantics as sem
 
 router = APIRouter(tags=["export"])
@@ -70,7 +69,7 @@ def build_report_markdown(dataset) -> str:
     analysis = dataset.analysis
     overview = profile["overview"]
     quality = analysis["quality"]
-    generated_at = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+    generated_at = datetime.now(UTC).strftime("%d/%m/%Y %H:%M UTC")
 
     lines: list[str] = [
         f"# Relatório de insights — {dataset.name}",
@@ -192,7 +191,7 @@ def report_json(dataset: ReadyDataset) -> dict:
     return {
         "title": f"Relatório de insights — {dataset.name}",
         "markdown": build_report_markdown(dataset),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "insights": dataset.analysis.get("insights", []),
         "quality": dataset.analysis.get("quality", {}),
     }

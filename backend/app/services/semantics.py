@@ -6,6 +6,7 @@ This module answers the questions the dashboard engine depends on:
 """
 from __future__ import annotations
 
+import contextlib
 import re
 import unicodedata
 from dataclasses import asdict, dataclass, field
@@ -387,12 +388,15 @@ def infer_column(name: str, series: pd.Series, row_count: int) -> tuple[ColumnSe
     else:
         # 2. Boolean flags.
         as_bool = try_boolean(series)
-        binary_numeric = set(str(v).strip() for v in non_null.unique()) <= {"0", "1"}
-        if as_bool is not None and (not binary_numeric or name_is_qty is False):
-            if not binary_numeric or _looks_like_flag(name):
-                sem_type, role = BOOLEAN, DIMENSION
-                coerced = as_bool
-                detail["true_ratio"] = float(as_bool.dropna().mean()) if as_bool.notna().any() else 0.0
+        binary_numeric = {str(v).strip() for v in non_null.unique()} <= {"0", "1"}
+        # "sim"/"nao" and "true"/"false" are unambiguous. A bare 0/1 column is
+        # only a flag when the name says so — otherwise it is a count or a code.
+        if as_bool is not None and (not binary_numeric or _looks_like_flag(name)):
+            sem_type, role = BOOLEAN, DIMENSION
+            coerced = as_bool
+            detail["true_ratio"] = (
+                float(as_bool.dropna().mean()) if as_bool.notna().any() else 0.0
+            )
 
         if sem_type == TEXT:
             # 3. Dates.
@@ -453,9 +457,7 @@ def infer_column(name: str, series: pd.Series, row_count: int) -> tuple[ColumnSe
                 else:
                     # 5. Text: category vs identifier vs free text.
                     avg_len = float(str_sample.str.len().mean())
-                    if name_is_id and card_ratio > 0.9:
-                        sem_type, role = IDENTIFIER, IDENTITY
-                    elif card_ratio > 0.95 and unique > 50 and avg_len > 12:
+                    if name_is_id and card_ratio > 0.9 or card_ratio > 0.95 and unique > 50 and avg_len > 12:
                         sem_type, role = IDENTIFIER, IDENTITY
                     elif avg_len > 80:
                         sem_type, role = TEXT, FREE_TEXT
@@ -492,10 +494,8 @@ def infer_column(name: str, series: pd.Series, row_count: int) -> tuple[ColumnSe
     # Keep integer-typed columns on an integer dtype so category labels render
     # as "3" rather than "3.0".
     if sem_type == INTEGER and coerced is not None:
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             coerced = coerced.astype("Int64")
-        except (TypeError, ValueError):
-            pass
 
     sem = ColumnSemantics(
         name=name,

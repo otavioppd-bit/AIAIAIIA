@@ -85,7 +85,7 @@ class DataAnalyst:
 
         # Intents that are answered from the pre-computed analysis document.
         if plan.intent in {"quality", "outliers", "overview", "correlation", "distribution"}:
-            return self._answer_from_analysis(question, plan, profile, analysis, plan_source)
+            return self._answer_from_analysis(plan, profile, analysis, plan_source)
 
         if plan.intent == "unsupported":
             return AnalystAnswer(
@@ -103,7 +103,7 @@ class DataAnalyst:
                 source=plan_source,
             )
 
-        query_plan = self._to_query_plan(plan, guard)
+        query_plan = self._to_query_plan(plan)
         result = qe.execute(frame, query_plan, guard)
 
         if result.row_count == 0:
@@ -120,7 +120,7 @@ class DataAnalyst:
                 notes=result.notes,
             )
 
-        chart = self._build_chart(plan, query_plan, result, guard)
+        chart = self._build_chart(plan, query_plan, result)
         types = {c['name']: c['semantic_type'] for c in column_semantics}
         narration = await self._narrate(question, query_plan, result, analysis, types)
 
@@ -174,7 +174,7 @@ class DataAnalyst:
                 return False
         return True
 
-    def _to_query_plan(self, plan: AnalystPlan, guard: qe.SchemaGuard) -> qe.QueryPlan:
+    def _to_query_plan(self, plan: AnalystPlan) -> qe.QueryPlan:
         metrics = [
             qe.MetricSpec(column=m.column, agg=m.agg) for m in plan.metrics
         ] or [qe.MetricSpec(column=None, agg="count")]
@@ -280,7 +280,6 @@ class DataAnalyst:
 
     def _answer_from_analysis(
         self,
-        question: str,
         plan: AnalystPlan,
         profile: dict[str, Any],
         analysis: dict[str, Any],
@@ -452,7 +451,6 @@ class DataAnalyst:
         plan: AnalystPlan,
         query_plan: qe.QueryPlan,
         result: qe.QueryResult,
-        guard: qe.SchemaGuard,
     ) -> dict[str, Any] | None:
         if plan.chart_type in (None, "none") or not result.rows:
             return None

@@ -12,7 +12,6 @@ import pandas as pd
 
 from app.services import domain as domain_mod
 from app.services import semantics as sem
-from app.services import statistics as stats
 
 # Insight kinds drive the icon and accent colour in the UI.
 TREND = "trend"
@@ -41,9 +40,7 @@ def _fmt(value: float | None, semantic_type: str = sem.FLOAT) -> str:
         body = f"{value / 1_000_000_000:,.2f} bi"
     elif abs_v >= 1_000_000:
         body = f"{value / 1_000_000:,.2f} mi"
-    elif abs_v >= 1000:
-        body = f"{value:,.0f}"
-    elif semantic_type == sem.INTEGER:
+    elif abs_v >= 1000 or semantic_type == sem.INTEGER:
         body = f"{value:,.0f}"
     else:
         body = f"{value:,.2f}"

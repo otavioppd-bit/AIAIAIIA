@@ -19,7 +19,7 @@ from app.core.errors import NotFoundError
 _ID_RE = re.compile(r"^[a-f0-9]{32}$")
 _CACHE_CAPACITY = 8
 
-_cache: "OrderedDict[str, pd.DataFrame]" = OrderedDict()
+_cache: OrderedDict[str, pd.DataFrame] = OrderedDict()
 _cache_lock = threading.Lock()
 
 

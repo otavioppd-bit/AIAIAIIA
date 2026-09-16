@@ -1,0 +1,20 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [".venv", "alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ARG", "SIM", "C4"]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B008",    # FastAPI's Depends() in defaults is the documented pattern
+    "ARG001",  # `request` is required by slowapi even when unread
+    "ARG002",
+    "SIM102",  # nested conditions often read better than a compound one
+    "SIM108",  # a ternary is not always clearer than if/else
+    "SIM110",  # an explicit loop can carry a comment; any() cannot
+    "UP042",   # str+Enum is deliberate: SQLAlchemy and Pydantic both rely on it
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG001", "ARG002", "SIM117"]

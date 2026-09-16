@@ -23,7 +23,7 @@ def test_detects_latin1_encoding():
 
 
 def test_brazilian_currency_parses_to_number():
-    raw = "produto,valor\nA,\"R$ 1.234,56\"\nB,\"R$ 890,00\"\n".encode()
+    raw = b"produto,valor\nA,\"R$ 1.234,56\"\nB,\"R$ 890,00\"\n"
     frame = read_csv_bytes(raw).frame
     typed, semantics = sem.analyse_schema(frame)
     valor = next(s for s in semantics if s.name == "valor")
@@ -32,7 +32,7 @@ def test_brazilian_currency_parses_to_number():
 
 
 def test_us_format_numbers_parse():
-    raw = "produto,valor\nA,\"1,234.56\"\nB,\"890.00\"\n".encode()
+    raw = b"produto,valor\nA,\"1,234.56\"\nB,\"890.00\"\n"
     typed, _ = sem.analyse_schema(read_csv_bytes(raw).frame)
     assert typed["valor"].sum() == pytest.approx(2124.56)
 
@@ -54,7 +54,7 @@ def test_duplicate_column_names_are_disambiguated():
 
 
 def test_formula_injection_is_neutralised():
-    raw = '"nome","nota"\n"=SUM(A1:A9)","10"\n"@cmd","9"\n'.encode()
+    raw = b'"nome","nota"\n"=SUM(A1:A9)","10"\n"@cmd","9"\n'
     frame = read_csv_bytes(raw).frame
     assert not frame["nome"].iloc[0].startswith("=")
     assert not frame["nome"].iloc[1].startswith("@")
@@ -76,4 +76,4 @@ def test_delimiter_sniffing(text, expected):
 
 
 def test_encoding_detection_prefers_utf8():
-    assert detect_encoding("olá".encode("utf-8")) == "utf-8"
+    assert detect_encoding("olá".encode()) == "utf-8"

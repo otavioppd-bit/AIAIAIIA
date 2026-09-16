@@ -436,7 +436,7 @@ def analyse_trend(
 
     points = [
         {"period": ts.isoformat(), "label": _period_label(ts, grain), "value": safe_float(v)}
-        for ts, v in zip(series.index, values)
+        for ts, v in zip(series.index, values, strict=True)
     ]
 
     return TrendResult(

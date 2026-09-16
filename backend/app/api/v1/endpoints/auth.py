@@ -12,13 +12,13 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import settings
+from app.core.errors import AuthError, ConflictError, ValidationError
 from app.core.ratelimit import (
     LOGIN_LIMIT,
     PASSWORD_RESET_LIMIT,
     REGISTER_LIMIT,
     limiter,
 )
-from app.core.errors import AuthError, ConflictError, ValidationError
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.models import User
 from app.schemas.auth import (

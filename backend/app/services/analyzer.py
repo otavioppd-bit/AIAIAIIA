@@ -13,9 +13,11 @@ import pandas as pd
 
 from app.core.config import settings
 from app.services import domain as domain_mod
-from app.services import ingestion, insights as insights_mod, profiling
+from app.services import ingestion, profiling, recommender
+from app.services import insights as insights_mod
 from app.services import quality as quality_mod
-from app.services import recommender, semantics as sem, statistics as stats
+from app.services import semantics as sem
+from app.services import statistics as stats
 
 # Guard rails on how much analysis work a single dataset can trigger.
 _MAX_TRENDS = 6

@@ -11,7 +11,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from app.core.errors import ValidationError
 from app.services import query_engine as qe
 from app.services import semantics as sem
 from app.services import statistics as stats

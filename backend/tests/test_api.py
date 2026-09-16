@@ -6,7 +6,6 @@ import io
 
 from fastapi.testclient import TestClient
 
-
 # --- Auth -----------------------------------------------------------------
 
 def test_register_login_and_me(client: TestClient):

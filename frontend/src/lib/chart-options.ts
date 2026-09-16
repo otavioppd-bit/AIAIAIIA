@@ -69,7 +69,9 @@ function tooltipBase(mode: ThemeMode) {
   };
 }
 
-function gridBase(showGrid: boolean, mode: ThemeMode) {
+/** Plot padding. `containLabel` reserves room for the axis band so labels are
+ *  never clipped by the card's own height. */
+function gridBase() {
   return {
     show: false,
     left: 8,
@@ -239,7 +241,7 @@ function buildLine(ctx: BuildContext, filled: boolean): EChartsOption {
   return {
     animationDuration: 520,
     animationEasing: 'cubicOut',
-    grid: { ...gridBase(style.showGrid !== false, mode), right: series.length > 1 ? 54 : 16 },
+    grid: { ...gridBase(), right: series.length > 1 ? 54 : 16 },
     legend: legendConfig(showLegend && series.length > 1, mode),
     tooltip: {
       ...tooltipBase(mode),
@@ -415,7 +417,7 @@ function buildBar(
   return {
     animationDuration: 460,
     animationEasing: 'cubicOut',
-    grid: gridBase(style.showGrid !== false, mode),
+    grid: gridBase(),
     legend: legendConfig(style.showLegend !== false && series.length > 1, mode),
     tooltip: {
       ...tooltipBase(mode),
@@ -572,7 +574,7 @@ function buildScatter(ctx: BuildContext): EChartsOption {
 
   return {
     animationDuration: 420,
-    grid: gridBase(style.showGrid !== false, mode),
+    grid: gridBase(),
     legend: legendConfig(style.showLegend !== false && series.length > 1, mode),
     tooltip: {
       ...tooltipBase(mode),
@@ -625,7 +627,7 @@ function buildHistogram(ctx: BuildContext): EChartsOption {
 
   return {
     animationDuration: 420,
-    grid: gridBase(style.showGrid !== false, mode),
+    grid: gridBase(),
     legend: { show: false },
     tooltip: {
       ...tooltipBase(mode),
@@ -702,7 +704,7 @@ function buildBoxPlot(ctx: BuildContext): EChartsOption {
 
   return {
     animationDuration: 420,
-    grid: gridBase(style.showGrid !== false, mode),
+    grid: gridBase(),
     legend: { show: false },
     tooltip: {
       ...tooltipBase(mode),
@@ -785,7 +787,6 @@ function buildHeatmap(ctx: BuildContext): EChartsOption {
   const values = data.rows
     .map((row) => toNumber(row[valueKey]))
     .filter((v): v is number => v !== null);
-  const maxAbs = Math.max(...values.map(Math.abs), 1);
   const min = Math.min(...values, 0);
   const max = Math.max(...values, 0);
 
@@ -797,7 +798,7 @@ function buildHeatmap(ctx: BuildContext): EChartsOption {
 
   return {
     animationDuration: 420,
-    grid: { ...gridBase(false, mode), bottom: 8, right: 8, top: 8 },
+    grid: { ...gridBase(), bottom: 8, right: 8, top: 8 },
     tooltip: {
       ...tooltipBase(mode),
       trigger: 'item',
