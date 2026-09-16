@@ -1,15 +1,19 @@
 """AI Data Analyst chat endpoints."""
-from __future__ import annotations
+# NOTE: this module deliberately omits `from __future__ import annotations`.
+# slowapi wraps the rate-limited handlers, and with string annotations FastAPI
+# resolves them against slowapi's module globals — where `DbSession` and
+# `CurrentUser` do not exist — and falls back to treating them as body fields.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, status
 from sqlalchemy import select
 
 from app.ai.analyst import DataAnalyst
 from app.ai.providers import provider_status
 from app.api.deps import CurrentUser, DbSession, ReadyDataset, load_dataset_frame
 from app.core.errors import NotFoundError
+from app.core.ratelimit import ASK_LIMIT, limiter
 from app.models import Conversation, Message
 from app.schemas.chat import (
     AskRequest,
@@ -32,8 +36,13 @@ def ai_status() -> dict:
 
 
 @router.post("/datasets/{dataset_id}/ask", response_model=AskResponse)
+@limiter.limit(ASK_LIMIT)
 async def ask(
-    payload: AskRequest, dataset: ReadyDataset, user: CurrentUser, db: DbSession
+    request: Request,
+    payload: AskRequest,
+    dataset: ReadyDataset,
+    user: CurrentUser,
+    db: DbSession,
 ) -> AskResponse:
     conversation = _resolve_conversation(db, payload, user.id, dataset.id)
 

@@ -1,14 +1,23 @@
 """Authentication endpoints: register, login, refresh, password reset, profile."""
-from __future__ import annotations
+# NOTE: this module deliberately omits `from __future__ import annotations`.
+# slowapi wraps the rate-limited handlers, and with string annotations FastAPI
+# resolves them against slowapi's module globals — where `DbSession` and
+# `CurrentUser` do not exist — and falls back to treating them as body fields.
 
 import logging
 
 import jwt
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import settings
+from app.core.ratelimit import (
+    LOGIN_LIMIT,
+    PASSWORD_RESET_LIMIT,
+    REGISTER_LIMIT,
+    limiter,
+)
 from app.core.errors import AuthError, ConflictError, ValidationError
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.models import User
@@ -43,7 +52,8 @@ def _normalise_email(email: str) -> str:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, db: DbSession) -> TokenResponse:
+@limiter.limit(REGISTER_LIMIT)
+def register(request: Request, payload: RegisterRequest, db: DbSession) -> TokenResponse:
     email = _normalise_email(payload.email)
     existing = db.scalar(select(User).where(User.email == email))
     if existing is not None:
@@ -62,7 +72,8 @@ def register(payload: RegisterRequest, db: DbSession) -> TokenResponse:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
+@limiter.limit(LOGIN_LIMIT)
+def login(request: Request, payload: LoginRequest, db: DbSession) -> TokenResponse:
     email = _normalise_email(payload.email)
     user = db.scalar(select(User).where(User.email == email))
     # Always run the hash comparison so a missing account and a wrong password
@@ -93,7 +104,10 @@ def refresh(payload: RefreshRequest, db: DbSession) -> TokenResponse:
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-def forgot_password(payload: ForgotPasswordRequest, db: DbSession) -> MessageResponse:
+@limiter.limit(PASSWORD_RESET_LIMIT)
+def forgot_password(
+    request: Request, payload: ForgotPasswordRequest, db: DbSession
+) -> MessageResponse:
     """Issue a reset token.
 
     The response is identical whether or not the account exists, so this
@@ -122,7 +136,10 @@ def forgot_password(payload: ForgotPasswordRequest, db: DbSession) -> MessageRes
 
 
 @router.post("/reset-password", response_model=MessageResponse)
-def reset_password(payload: ResetPasswordRequest, db: DbSession) -> MessageResponse:
+@limiter.limit(PASSWORD_RESET_LIMIT)
+def reset_password(
+    request: Request, payload: ResetPasswordRequest, db: DbSession
+) -> MessageResponse:
     try:
         claims = decode_token(payload.token, expected_type="reset")
     except jwt.ExpiredSignatureError as exc:

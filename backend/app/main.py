@@ -11,11 +11,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
 from app.ai.providers import provider_status
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.errors import AppError
+from app.core.ratelimit import limiter, rate_limit_handler
 from app.schemas.common import HealthResponse
 
 VERSION = "1.0.0"
@@ -60,6 +64,10 @@ app.add_middleware(
     max_age=600,
 )
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 
 @app.middleware("http")

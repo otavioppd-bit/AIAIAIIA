@@ -1,16 +1,20 @@
 """Dataset endpoints: upload, listing, profiling, quality and raw rows."""
-from __future__ import annotations
+# NOTE: this module deliberately omits `from __future__ import annotations`.
+# slowapi wraps the rate-limited handlers, and with string annotations FastAPI
+# resolves them against slowapi's module globals — where `DbSession` and
+# `CurrentUser` do not exist — and falls back to treating them as body fields.
 
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, File, Query, UploadFile, status
+from fastapi import APIRouter, File, Query, Request, UploadFile, status
 from sqlalchemy import func, select
 
 from app.ai.analyst import DataAnalyst
 from app.api.deps import CurrentUser, DbSession, OwnedDataset, ReadyDataset, load_dataset_frame
 from app.core.config import settings
 from app.core.errors import FileTooLargeError, UnprocessableDatasetError, ValidationError
+from app.core.ratelimit import UPLOAD_LIMIT, limiter
 from app.models import Dashboard, Dataset, DatasetStatus
 from app.schemas.common import MessageResponse
 from app.schemas.dataset import (
@@ -73,7 +77,9 @@ def _safe_name(filename: str) -> str:
 
 
 @router.post("", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(UPLOAD_LIMIT)
 async def upload_dataset(
+    request: Request,
     user: CurrentUser,
     db: DbSession,
     file: Annotated[UploadFile, File(description="Arquivo CSV")],
