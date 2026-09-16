@@ -130,10 +130,59 @@ def _aggregate(
         include_others=chart_type in {"donut", "pie", "treemap"},
     )
     result = qe.execute(frame, plan, guard)
+    payload = result.to_dict()
+    notes = list(payload.get("notes", []))
+
+    if encoding.get("normalize") == "index_100" and len(metrics) > 1:
+        payload["rows"] = _index_to_100(
+            payload["rows"], [m.output_name for m in metrics]
+        )
+        notes.append(
+            "Séries indexadas ao primeiro período (=100) para permitir comparação "
+            "em um único eixo."
+        )
+        payload["notes"] = notes
+
     return {
-        **result.to_dict(),
-        "meta": {"chart_type": chart_type, "temporal": is_temporal, "agg": agg},
+        **payload,
+        "meta": {
+            "chart_type": chart_type,
+            "temporal": is_temporal,
+            "agg": agg,
+            "normalized": encoding.get("normalize"),
+        },
     }
+
+
+def _index_to_100(rows: list[dict[str, Any]], measures: list[str]) -> list[dict[str, Any]]:
+    """Rebase each measure so its first non-zero value is 100.
+
+    This is what makes two metrics of different magnitude comparable on one
+    axis — the alternative, a second Y scale, aligns two ranges arbitrarily and
+    fabricates a correlation the data does not contain.
+    """
+    if not rows:
+        return rows
+    bases: dict[str, float] = {}
+    for measure in measures:
+        for row in rows:
+            value = row.get(measure)
+            if isinstance(value, (int, float)) and value not in (0, None):
+                bases[measure] = float(value)
+                break
+
+    indexed: list[dict[str, Any]] = []
+    for row in rows:
+        new_row = dict(row)
+        for measure in measures:
+            base = bases.get(measure)
+            value = row.get(measure)
+            if base and isinstance(value, (int, float)):
+                new_row[measure] = round(float(value) / base * 100, 2)
+            elif measure in new_row:
+                new_row[measure] = None
+        indexed.append(new_row)
+    return indexed
 
 
 def _histogram(

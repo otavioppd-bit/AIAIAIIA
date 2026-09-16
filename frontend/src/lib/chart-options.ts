@@ -1,0 +1,1114 @@
+/**
+ * ECharts option builders.
+ *
+ * Mark specs applied throughout, per the data-viz method:
+ *  - 2px lines, ≥8px markers, 4px rounded bar ends anchored to the baseline
+ *  - a 2px surface-coloured gap between adjacent/stacked fills (never a border)
+ *  - solid hairline grid one shade off the surface (never dashed)
+ *  - a legend whenever there are ≥2 series; selective direct labels only
+ *  - crosshair + tooltip on continuous forms, per-mark tooltip elsewhere
+ *  - one Y axis. Ever. Different scales are indexed to 100 upstream.
+ */
+import type { EChartsOption } from 'echarts';
+import type { ChartEncoding, ChartType, DataRow, WidgetDataResponse } from '@/types/api';
+import {
+  ALL_PAIRS_SAFE_SLOTS,
+  MAX_CATEGORICAL_SERIES,
+  PALETTES,
+  createColorScale,
+  divergingRamp,
+  accentColor,
+} from '@/lib/palette';
+import { compactNumber, formatValue, humanize, type ValueFormat } from '@/lib/format';
+
+export type ThemeMode = 'light' | 'dark';
+
+export interface BuildContext {
+  mode: ThemeMode;
+  chartType: ChartType;
+  data: WidgetDataResponse;
+  encoding: ChartEncoding & { [key: string]: unknown };
+  style?: {
+    showLegend?: boolean;
+    showGrid?: boolean;
+    showDataLabels?: boolean;
+    accent?: string;
+    colorScheme?: string;
+  };
+  valueFormat?: ValueFormat;
+  compact?: boolean;
+  options?: Record<string, unknown>;
+}
+
+const AXIS_FONT = 11;
+const LABEL_FONT = 11;
+
+function baseTextStyle(mode: ThemeMode) {
+  return {
+    fontFamily: 'var(--font-sans), Inter, system-ui, sans-serif',
+    color: PALETTES[mode].textSecondary,
+    fontSize: AXIS_FONT,
+  };
+}
+
+function tooltipBase(mode: ThemeMode) {
+  const palette = PALETTES[mode];
+  return {
+    backgroundColor: mode === 'dark' ? 'rgba(24,24,33,0.96)' : 'rgba(255,255,255,0.98)',
+    borderColor: mode === 'dark' ? 'rgba(58,58,74,0.9)' : 'rgba(228,228,236,1)',
+    borderWidth: 1,
+    padding: [10, 12],
+    extraCssText:
+      'border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,0.18);backdrop-filter:blur(8px);',
+    textStyle: { color: palette.textPrimary, fontSize: 12, fontFamily: 'var(--font-sans)' },
+  };
+}
+
+function gridBase(showGrid: boolean, mode: ThemeMode) {
+  return {
+    show: false,
+    left: 8,
+    right: 16,
+    top: 16,
+    bottom: 8,
+    containLabel: true,
+  };
+}
+
+function axisLineStyle(mode: ThemeMode) {
+  return { show: true, lineStyle: { color: PALETTES[mode].axis, width: 1, type: 'solid' as const } };
+}
+
+function splitLineStyle(show: boolean, mode: ThemeMode) {
+  // Solid hairline. Dashed gridlines read as "threshold" and add noise.
+  return { show, lineStyle: { color: PALETTES[mode].grid, width: 1, type: 'solid' as const } };
+}
+
+/** Truncate long category labels; the tooltip always carries the full text. */
+function truncate(value: string, max = 16): string {
+  const text = String(value ?? '');
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function axisValueFormatter(format: ValueFormat, compact = true) {
+  return (value: number) => {
+    if (!Number.isFinite(value)) return '';
+    if (format === 'percent') return `${compactNumber(value)}%`;
+    if (format === 'currency') {
+      return Math.abs(value) >= 1000 ? `R$ ${compactNumber(value)}` : `R$ ${value.toFixed(0)}`;
+    }
+    return compact ? compactNumber(value) : String(value);
+  };
+}
+
+function measureColumns(ctx: BuildContext): string[] {
+  const { data, encoding } = ctx;
+  const groupColumns = new Set(
+    [encoding.x, encoding.series].filter((c): c is string => Boolean(c)),
+  );
+  return data.columns.filter((c) => !groupColumns.has(c));
+}
+
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
+export function buildChartOption(ctx: BuildContext): EChartsOption {
+  switch (ctx.chartType) {
+    case 'line':
+    case 'area':
+      return buildLine(ctx, ctx.chartType === 'area');
+    case 'bar':
+      return buildBar(ctx, 'vertical', false);
+    case 'bar_horizontal':
+      return buildBar(ctx, 'horizontal', false);
+    case 'stacked_bar':
+      return buildBar(ctx, 'vertical', true);
+    case 'donut':
+      return buildPie(ctx, true);
+    case 'pie':
+      return buildPie(ctx, false);
+    case 'scatter':
+      return buildScatter(ctx);
+    case 'histogram':
+      return buildHistogram(ctx);
+    case 'box_plot':
+      return buildBoxPlot(ctx);
+    case 'heatmap':
+      return buildHeatmap(ctx);
+    case 'treemap':
+      return buildTreemap(ctx);
+    case 'radar':
+      return buildRadar(ctx);
+    case 'funnel':
+      return buildFunnel(ctx);
+    case 'map':
+      return buildBar(ctx, 'horizontal', false);
+    default:
+      return buildBar(ctx, 'vertical', false);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Line / area
+// ---------------------------------------------------------------------------
+
+function buildLine(ctx: BuildContext, filled: boolean): EChartsOption {
+  const { mode, data, encoding, style = {}, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const xKey = encoding.x ?? data.columns[0];
+  const seriesKey = encoding.series;
+  const measures = measureColumns(ctx);
+  const showLegend = style.showLegend !== false;
+  const indexed = Boolean(ctx.options?.normalize === 'index_100' || data.meta?.normalized);
+  const format: ValueFormat = indexed ? 'decimal' : valueFormat;
+
+  const scale = createColorScale(mode);
+  let categories: string[];
+  let series: Record<string, unknown>[];
+
+  if (seriesKey) {
+    // Long format: one line per distinct value of the series column.
+    categories = uniqueValues(data.rows, xKey);
+    const groups = uniqueValues(data.rows, seriesKey).slice(0, MAX_CATEGORICAL_SERIES);
+    scale.seed(groups);
+    const measure = measures[0];
+    series = groups.map((group, index) => ({
+      name: group,
+      type: 'line',
+      smooth: 0.24,
+      smoothMonotone: 'x',
+      symbol: 'circle',
+      symbolSize: 8,
+      showSymbol: categories.length <= 24,
+      sampling: 'lttb',
+      lineStyle: { width: 2, color: scale.get(group) },
+      itemStyle: { color: scale.get(group), borderWidth: 2, borderColor: palette.surface },
+      areaStyle: filled ? areaGradient(scale.get(group), mode, groups.length) : undefined,
+      emphasis: { focus: 'series', lineStyle: { width: 3 } },
+      data: categories.map((category) => {
+        const row = data.rows.find(
+          (r) => String(r[xKey]) === category && String(r[seriesKey]) === group,
+        );
+        return row ? toNumber(row[measure]) : null;
+      }),
+      z: 10 - index,
+    }));
+  } else {
+    categories = data.rows.map((row) => String(row[xKey] ?? ''));
+    const lineMeasures = measures.slice(0, MAX_CATEGORICAL_SERIES);
+    scale.seed(lineMeasures);
+    series = lineMeasures.map((measure, index) => ({
+      name: humanize(measure),
+      type: 'line',
+      smooth: 0.24,
+      smoothMonotone: 'x',
+      symbol: 'circle',
+      symbolSize: 8,
+      showSymbol: categories.length <= 24,
+      sampling: 'lttb',
+      lineStyle: { width: 2, color: scale.get(measure) },
+      itemStyle: { color: scale.get(measure), borderWidth: 2, borderColor: palette.surface },
+      areaStyle:
+        filled && lineMeasures.length === 1
+          ? areaGradient(scale.get(measure), mode, 1)
+          : undefined,
+      emphasis: { focus: 'series', lineStyle: { width: 3 } },
+      // Direct-label the final point only — never every point.
+      endLabel:
+        lineMeasures.length > 1 && lineMeasures.length <= 4
+          ? {
+              show: true,
+              formatter: fmt<MarkParams>((params) => params.seriesName),
+              color: scale.get(measure),
+              fontSize: LABEL_FONT,
+              fontWeight: 600,
+              distance: 6,
+            }
+          : { show: false },
+      data: data.rows.map((row) => toNumber(row[measure])),
+      z: 10 - index,
+    }));
+  }
+
+  return {
+    animationDuration: 520,
+    animationEasing: 'cubicOut',
+    grid: { ...gridBase(style.showGrid !== false, mode), right: series.length > 1 ? 54 : 16 },
+    legend: legendConfig(showLegend && series.length > 1, mode),
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'axis',
+      axisPointer: {
+        type: 'line',
+        lineStyle: { color: palette.axis, width: 1, type: 'solid' },
+        snap: true,
+      },
+      valueFormatter: (value) =>
+        indexed
+          ? `${formatValue(toNumber(value), 'decimal')} (base 100)`
+          : formatValue(toNumber(value), format),
+    },
+    xAxis: {
+      type: 'category',
+      data: categories,
+      boundaryGap: false,
+      axisLine: axisLineStyle(mode),
+      axisTick: { show: false },
+      splitLine: { show: false },
+      axisLabel: {
+        ...baseTextStyle(mode),
+        color: palette.textMuted,
+        hideOverlap: true,
+        formatter: (value: string) => truncate(value, 12),
+      },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: splitLineStyle(style.showGrid !== false, mode),
+      axisLabel: {
+        ...baseTextStyle(mode),
+        color: palette.textMuted,
+        formatter: axisValueFormatter(format),
+      },
+      // Index charts read against their 100 baseline.
+      ...(indexed ? { min: 'dataMin' as const } : {}),
+    },
+    series: series as EChartsOption['series'],
+  };
+}
+
+function areaGradient(color: string, mode: ThemeMode, seriesCount: number) {
+  const topOpacity = seriesCount > 1 ? 0.18 : 0.26;
+  return {
+    opacity: 1,
+    color: {
+      type: 'linear' as const,
+      x: 0,
+      y: 0,
+      x2: 0,
+      y2: 1,
+      colorStops: [
+        { offset: 0, color: withAlpha(color, topOpacity) },
+        { offset: 1, color: withAlpha(color, 0.02) },
+      ],
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Bar
+// ---------------------------------------------------------------------------
+
+function buildBar(
+  ctx: BuildContext,
+  orientation: 'vertical' | 'horizontal',
+  stacked: boolean,
+): EChartsOption {
+  const { mode, data, encoding, style = {}, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const xKey = encoding.x ?? data.columns[0];
+  const seriesKey = encoding.series;
+  const measures = measureColumns(ctx);
+  const measure = measures[0];
+  const horizontal = orientation === 'horizontal';
+  const scale = createColorScale(mode);
+
+  // A horizontal ranking reads top-to-bottom, so the rows are reversed.
+  const rows = horizontal ? [...data.rows].reverse() : data.rows;
+
+  let categories: string[];
+  let series: Record<string, unknown>[];
+
+  if (seriesKey) {
+    categories = uniqueValues(rows, xKey);
+    const groups = uniqueValues(rows, seriesKey).slice(0, MAX_CATEGORICAL_SERIES);
+    scale.seed([...groups].sort());
+    series = groups.map((group) => ({
+      name: group,
+      type: 'bar',
+      stack: stacked ? 'total' : undefined,
+      barMaxWidth: 34,
+      barGap: '12%',
+      barCategoryGap: '32%',
+      itemStyle: {
+        color: scale.get(group),
+        borderRadius: stacked ? 2 : roundedEnds(horizontal),
+        // A 2px surface gap separates fills — never a stroke around the mark.
+        borderColor: palette.surface,
+        borderWidth: stacked ? 2 : 0,
+      },
+      emphasis: { focus: 'series' },
+      data: categories.map((category) => {
+        const row = rows.find(
+          (r) => String(r[xKey]) === category && String(r[seriesKey]) === group,
+        );
+        return row ? toNumber(row[measure]) : null;
+      }),
+    }));
+  } else {
+    categories = rows.map((row) => String(row[xKey] ?? ''));
+    // One series → one colour for every bar. Never a value-ramp on nominal
+    // categories: that double-encodes bar length as hue.
+    const color = accentColor(style.accent ?? 'primary', mode);
+    series = [
+      {
+        name: humanize(measure ?? 'valor'),
+        type: 'bar',
+        barMaxWidth: horizontal ? 22 : 40,
+        barCategoryGap: '34%',
+        itemStyle: { color, borderRadius: roundedEnds(horizontal) },
+        emphasis: { itemStyle: { color: withAlpha(color, 0.85) } },
+        label: style.showDataLabels
+          ? {
+              show: true,
+              position: horizontal ? 'right' : 'top',
+              color: palette.textSecondary,
+              fontSize: LABEL_FONT,
+              formatter: fmt<MarkParams>((params) =>
+                formatValue(params.value, valueFormat, { compact: true }),
+              ),
+            }
+          : { show: false },
+        data: rows.map((row) => toNumber(row[measure])),
+      },
+    ];
+  }
+
+  const categoryAxis = {
+    type: 'category' as const,
+    data: categories,
+    axisLine: axisLineStyle(mode),
+    axisTick: { show: false },
+    splitLine: { show: false },
+    axisLabel: {
+      ...baseTextStyle(mode),
+      color: palette.textMuted,
+      hideOverlap: true,
+      width: horizontal ? 120 : undefined,
+      overflow: horizontal ? ('truncate' as const) : undefined,
+      formatter: (value: string) => truncate(value, horizontal ? 18 : 12),
+      interval: 0,
+      rotate: !horizontal && categories.length > 8 ? 30 : 0,
+    },
+  };
+
+  const valueAxis = {
+    type: 'value' as const,
+    axisLine: { show: false },
+    axisTick: { show: false },
+    splitLine: splitLineStyle(style.showGrid !== false, mode),
+    axisLabel: {
+      ...baseTextStyle(mode),
+      color: palette.textMuted,
+      formatter: axisValueFormatter(valueFormat),
+    },
+  };
+
+  return {
+    animationDuration: 460,
+    animationEasing: 'cubicOut',
+    grid: gridBase(style.showGrid !== false, mode),
+    legend: legendConfig(style.showLegend !== false && series.length > 1, mode),
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: withAlpha(palette.textPrimary, 0.05) } },
+      valueFormatter: (value) => formatValue(toNumber(value), valueFormat),
+    },
+    xAxis: horizontal ? valueAxis : categoryAxis,
+    yAxis: horizontal ? categoryAxis : valueAxis,
+    series: series as EChartsOption['series'],
+  };
+}
+
+/** 4px rounded ends on the data end only, anchored to the baseline. */
+function roundedEnds(horizontal: boolean): number[] {
+  return horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0];
+}
+
+// ---------------------------------------------------------------------------
+// Pie / donut
+// ---------------------------------------------------------------------------
+
+function buildPie(ctx: BuildContext, donut: boolean): EChartsOption {
+  const { mode, data, encoding, style = {}, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const labelKey = encoding.x ?? data.columns[0];
+  const measure = measureColumns(ctx)[0];
+
+  const rows = data.rows.slice(0, MAX_CATEGORICAL_SERIES);
+  const scale = createColorScale(mode);
+  scale.seed(rows.map((row) => String(row[labelKey] ?? '')));
+
+  const total = rows.reduce((sum, row) => sum + (toNumber(row[measure]) ?? 0), 0);
+
+  return {
+    animationDuration: 520,
+    legend: legendConfig(style.showLegend !== false, mode, 'right'),
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'item',
+      formatter: fmt<MarkParams>(
+        (params) =>
+          `<div style="font-weight:600;margin-bottom:2px">${params.name}</div>` +
+          `${formatValue(params.value, valueFormat)} · ${params.percent.toFixed(1)}%`,
+      ),
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: donut ? ['58%', '82%'] : ['0%', '78%'],
+        center: ['38%', '52%'],
+        avoidLabelOverlap: true,
+        padAngle: 1.2,
+        itemStyle: {
+          // 2px surface gap between slices instead of a stroke.
+          borderColor: palette.surface,
+          borderWidth: 2,
+          borderRadius: 4,
+        },
+        label: {
+          show: donut,
+          position: 'center',
+          formatter: fmt<MarkParams>(
+            () => `{value|${formatValue(total, valueFormat, { compact: true })}}\n{label|Total}`,
+          ),
+          rich: {
+            value: { fontSize: 20, fontWeight: 700, color: palette.textPrimary, lineHeight: 26 },
+            label: { fontSize: 11, color: palette.textMuted, lineHeight: 16 },
+          },
+        },
+        emphasis: {
+          scale: true,
+          scaleSize: 4,
+          label: { show: donut },
+        },
+        labelLine: { show: false },
+        data: rows.map((row) => ({
+          name: String(row[labelKey] ?? ''),
+          value: toNumber(row[measure]) ?? 0,
+          itemStyle: { color: scale.get(String(row[labelKey] ?? '')) },
+        })),
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Scatter
+// ---------------------------------------------------------------------------
+
+function buildScatter(ctx: BuildContext): EChartsOption {
+  const { mode, data, encoding, style = {}, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const xKey = encoding.x ?? data.columns[0];
+  const yKey = encoding.y ?? data.columns[1];
+  const seriesKey = encoding.series;
+
+  const scale = createColorScale(mode);
+  const series: Record<string, unknown>[] = [];
+
+  if (seriesKey) {
+    // Scatter puts every pair of hues on screen at once, so only the slots
+    // that clear the all-pairs gate are used; the rest folds into "Outros".
+    const groups = uniqueValues(data.rows, seriesKey).slice(0, ALL_PAIRS_SAFE_SLOTS);
+    scale.seed(groups);
+    groups.forEach((group) => {
+      series.push({
+        name: group,
+        type: 'scatter',
+        symbolSize: 9,
+        itemStyle: {
+          color: withAlpha(scale.get(group), 0.72),
+          borderColor: palette.surface,
+          borderWidth: 2,
+        },
+        emphasis: { focus: 'series', itemStyle: { opacity: 1 } },
+        data: data.rows
+          .filter((row) => String(row[seriesKey]) === group)
+          .map((row) => [toNumber(row[xKey]), toNumber(row[yKey])]),
+      });
+    });
+  } else {
+    const color = accentColor(style.accent ?? 'primary', mode);
+    series.push({
+      name: humanize(yKey ?? 'y'),
+      type: 'scatter',
+      symbolSize: 9,
+      itemStyle: {
+        color: withAlpha(color, 0.62),
+        borderColor: palette.surface,
+        borderWidth: 2,
+      },
+      data: data.rows.map((row) => [toNumber(row[xKey]), toNumber(row[yKey])]),
+    });
+  }
+
+  // The fitted line is computed by the backend from the full dataset, not from
+  // the sampled points, so it describes the real relationship.
+  const regression = data.meta?.regression;
+  if (regression && ctx.options?.show_regression !== false) {
+    series.push({
+      name: 'Tendência linear',
+      type: 'line',
+      showSymbol: false,
+      silent: true,
+      lineStyle: { width: 2, color: palette.textMuted, type: 'dashed', opacity: 0.8 },
+      data: [
+        [regression.x_min, regression.slope * regression.x_min + regression.intercept],
+        [regression.x_max, regression.slope * regression.x_max + regression.intercept],
+      ],
+      z: 1,
+    });
+  }
+
+  return {
+    animationDuration: 420,
+    grid: gridBase(style.showGrid !== false, mode),
+    legend: legendConfig(style.showLegend !== false && series.length > 1, mode),
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'item',
+      formatter: fmt<{ value: [number, number]; seriesName: string; color: string }>(
+        (params) =>
+          `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">` +
+          `<span style="width:8px;height:8px;border-radius:50%;background:${params.color}"></span>` +
+          `<strong>${params.seriesName}</strong></div>` +
+          `${humanize(String(xKey))}: ${formatValue(params.value[0], 'decimal')}<br/>` +
+          `${humanize(String(yKey))}: ${formatValue(params.value[1], valueFormat)}`,
+      ),
+    },
+    xAxis: {
+      type: 'value',
+      name: humanize(String(xKey)),
+      nameLocation: 'middle',
+      nameGap: 28,
+      nameTextStyle: { ...baseTextStyle(mode), color: palette.textMuted, fontSize: 11 },
+      axisLine: axisLineStyle(mode),
+      axisTick: { show: false },
+      splitLine: splitLineStyle(style.showGrid !== false, mode),
+      axisLabel: { ...baseTextStyle(mode), color: palette.textMuted, formatter: axisValueFormatter('decimal') },
+      scale: true,
+    },
+    yAxis: {
+      type: 'value',
+      name: humanize(String(yKey)),
+      nameLocation: 'middle',
+      nameGap: 44,
+      nameTextStyle: { ...baseTextStyle(mode), color: palette.textMuted, fontSize: 11 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: splitLineStyle(style.showGrid !== false, mode),
+      axisLabel: { ...baseTextStyle(mode), color: palette.textMuted, formatter: axisValueFormatter(valueFormat) },
+      scale: true,
+    },
+    series: series as EChartsOption['series'],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Histogram
+// ---------------------------------------------------------------------------
+
+function buildHistogram(ctx: BuildContext): EChartsOption {
+  const { mode, data, style = {} } = ctx;
+  const palette = PALETTES[mode];
+  const color = accentColor(style.accent ?? 'primary', mode);
+
+  return {
+    animationDuration: 420,
+    grid: gridBase(style.showGrid !== false, mode),
+    legend: { show: false },
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: withAlpha(palette.textPrimary, 0.05) } },
+      formatter: fmt<MarkParams[]>((params) => {
+        const first = params[0];
+        return `<div style="font-weight:600;margin-bottom:2px">${first.name}</div>${formatValue(
+          first.value,
+          'integer',
+        )} registros`;
+      }),
+    },
+    xAxis: {
+      type: 'category',
+      data: data.rows.map((row) => String(row.label ?? '')),
+      axisLine: axisLineStyle(mode),
+      axisTick: { show: false },
+      axisLabel: {
+        ...baseTextStyle(mode),
+        color: palette.textMuted,
+        hideOverlap: true,
+        formatter: (value: string) => value.split(' – ')[0],
+      },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: splitLineStyle(style.showGrid !== false, mode),
+      axisLabel: { ...baseTextStyle(mode), color: palette.textMuted, formatter: axisValueFormatter('integer') },
+    },
+    series: [
+      {
+        type: 'bar',
+        // Bins are contiguous, so a 1px gap keeps the distribution's shape
+        // readable without implying separate categories.
+        barCategoryGap: '2%',
+        itemStyle: { color, borderRadius: [3, 3, 0, 0] },
+        emphasis: { itemStyle: { color: withAlpha(color, 0.82) } },
+        data: data.rows.map((row) => toNumber(row.count)),
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Box plot
+// ---------------------------------------------------------------------------
+
+function buildBoxPlot(ctx: BuildContext): EChartsOption {
+  const { mode, data, style = {}, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const color = accentColor(style.accent ?? 'primary', mode);
+
+  // A box needs a complete five-number summary; incomplete groups are skipped
+  // rather than rendered with gaps.
+  const complete = data.rows.filter((row) =>
+    ['min', 'q1', 'median', 'q3', 'max'].every((key) => toNumber(row[key]) !== null),
+  );
+  const categories = complete.map((row) => String(row.label ?? ''));
+  const boxes: number[][] = complete.map((row) => [
+    toNumber(row.min) as number,
+    toNumber(row.q1) as number,
+    toNumber(row.median) as number,
+    toNumber(row.q3) as number,
+    toNumber(row.max) as number,
+  ]);
+  const outliers: [number, number][] = [];
+  complete.forEach((row, index) => {
+    const values = (row as unknown as { outliers?: number[] }).outliers ?? [];
+    values.forEach((value) => outliers.push([index, value]));
+  });
+
+  return {
+    animationDuration: 420,
+    grid: gridBase(style.showGrid !== false, mode),
+    legend: { show: false },
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'item',
+      formatter: fmt<{ name: string; value: number[]; seriesType: string }>((params) => {
+        if (params.seriesType === 'scatter') {
+          return `Outlier: ${formatValue(params.value[1], valueFormat)}`;
+        }
+        const [, min, q1, median, q3, max] = params.value;
+        return (
+          `<div style="font-weight:600;margin-bottom:4px">${params.name}</div>` +
+          `Máximo: ${formatValue(max, valueFormat)}<br/>` +
+          `Q3: ${formatValue(q3, valueFormat)}<br/>` +
+          `<strong>Mediana: ${formatValue(median, valueFormat)}</strong><br/>` +
+          `Q1: ${formatValue(q1, valueFormat)}<br/>` +
+          `Mínimo: ${formatValue(min, valueFormat)}`
+        );
+      }),
+    },
+    xAxis: {
+      type: 'category',
+      data: categories,
+      axisLine: axisLineStyle(mode),
+      axisTick: { show: false },
+      axisLabel: {
+        ...baseTextStyle(mode),
+        color: palette.textMuted,
+        hideOverlap: true,
+        formatter: (value: string) => truncate(value, 14),
+      },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: splitLineStyle(style.showGrid !== false, mode),
+      axisLabel: { ...baseTextStyle(mode), color: palette.textMuted, formatter: axisValueFormatter(valueFormat) },
+      scale: true,
+    },
+    series: [
+      {
+        name: 'Distribuição',
+        type: 'boxplot',
+        data: boxes,
+        boxWidth: ['28%', '48%'],
+        itemStyle: { color: withAlpha(color, 0.22), borderColor: color, borderWidth: 2 },
+        emphasis: { itemStyle: { borderWidth: 2.5 } },
+      },
+      {
+        name: 'Outliers',
+        type: 'scatter',
+        data: outliers,
+        symbolSize: 8,
+        itemStyle: {
+          color: withAlpha(PALETTES[mode].status.negative, 0.7),
+          borderColor: palette.surface,
+          borderWidth: 2,
+        },
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Heatmap
+// ---------------------------------------------------------------------------
+
+function buildHeatmap(ctx: BuildContext): EChartsOption {
+  const { mode, data, encoding, style = {}, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const isCorrelation = encoding.matrix === 'correlation' || data.meta?.scale === 'diverging';
+
+  const xKey = isCorrelation ? 'x' : (encoding.x ?? data.columns[0]);
+  const yKey = isCorrelation ? 'y' : (encoding.series ?? data.columns[1]);
+  const valueKey = isCorrelation ? 'value' : measureColumns(ctx)[0];
+
+  const xCategories = uniqueValues(data.rows, xKey);
+  const yCategories = uniqueValues(data.rows, yKey);
+
+  const values = data.rows
+    .map((row) => toNumber(row[valueKey]))
+    .filter((v): v is number => v !== null);
+  const maxAbs = Math.max(...values.map(Math.abs), 1);
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+
+  const cells = data.rows.map((row) => [
+    xCategories.indexOf(String(row[xKey])),
+    yCategories.indexOf(String(row[yKey])),
+    toNumber(row[valueKey]),
+  ]);
+
+  return {
+    animationDuration: 420,
+    grid: { ...gridBase(false, mode), bottom: 8, right: 8, top: 8 },
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'item',
+      formatter: fmt<{ value: [number, number, number] }>((params) => {
+        const [xi, yi, value] = params.value;
+        const label = isCorrelation
+          ? `r = ${value === null ? '—' : value.toFixed(2)}`
+          : formatValue(value, valueFormat);
+        return `<div style="font-weight:600;margin-bottom:2px">${humanize(
+          xCategories[xi] ?? '',
+        )} × ${humanize(yCategories[yi] ?? '')}</div>${label}`;
+      }),
+    },
+    // Correlation is polarity: diverging, two opposite hues, neutral midpoint.
+    // Cross-tab magnitude is sequential: one hue, light → dark.
+    visualMap: {
+      type: 'continuous',
+      min: isCorrelation ? -1 : min,
+      max: isCorrelation ? 1 : max,
+      calculable: true,
+      orient: 'horizontal',
+      left: 'center',
+      bottom: 0,
+      itemWidth: 12,
+      itemHeight: 90,
+      textStyle: { ...baseTextStyle(mode), color: palette.textMuted },
+      inRange: {
+        color: isCorrelation ? divergingRamp(mode) : PALETTES[mode].sequential,
+      },
+    },
+    xAxis: {
+      type: 'category',
+      data: xCategories.map((c) => humanize(c)),
+      splitArea: { show: false },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: {
+        ...baseTextStyle(mode),
+        color: palette.textMuted,
+        hideOverlap: true,
+        rotate: xCategories.length > 6 ? 32 : 0,
+        formatter: (value: string) => truncate(value, 14),
+      },
+    },
+    yAxis: {
+      type: 'category',
+      data: yCategories.map((c) => humanize(c)),
+      splitArea: { show: false },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: {
+        ...baseTextStyle(mode),
+        color: palette.textMuted,
+        formatter: (value: string) => truncate(value, 14),
+      },
+    },
+    series: [
+      {
+        type: 'heatmap',
+        data: cells,
+        // 2px surface gap between cells rather than an outline.
+        itemStyle: { borderColor: palette.surface, borderWidth: 2, borderRadius: 3 },
+        label: {
+          show: isCorrelation && xCategories.length <= 8,
+          fontSize: 10,
+          color: palette.textPrimary,
+          formatter: fmt<{ value: [number, number, number] }>((params) =>
+            params.value[2] === null ? '' : params.value[2].toFixed(2),
+          ),
+        },
+        emphasis: { itemStyle: { borderColor: palette.textPrimary, borderWidth: 2 } },
+        progressive: 400,
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Treemap
+// ---------------------------------------------------------------------------
+
+function buildTreemap(ctx: BuildContext): EChartsOption {
+  const { mode, data, encoding, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const labelKey = encoding.x ?? data.columns[0];
+  const measure = measureColumns(ctx)[0];
+  const scale = createColorScale(mode);
+  const labels = data.rows.map((row) => String(row[labelKey] ?? ''));
+  scale.seed(labels.slice(0, MAX_CATEGORICAL_SERIES));
+
+  return {
+    animationDuration: 500,
+    tooltip: {
+      ...tooltipBase(mode),
+      formatter: fmt<MarkParams>(
+        (params) =>
+          `<div style="font-weight:600;margin-bottom:2px">${params.name}</div>${formatValue(
+            params.value,
+            valueFormat,
+          )}`,
+      ),
+    },
+    series: [
+      {
+        type: 'treemap',
+        roam: false,
+        nodeClick: false,
+        breadcrumb: { show: false },
+        width: '100%',
+        height: '100%',
+        itemStyle: { borderColor: palette.surface, borderWidth: 2, gapWidth: 2, borderRadius: 4 },
+        label: {
+          show: true,
+          fontSize: 11,
+          color: '#ffffff',
+          overflow: 'truncate',
+          formatter: fmt<MarkParams>((params) => params.name),
+        },
+        upperLabel: { show: false },
+        emphasis: { itemStyle: { borderColor: palette.textPrimary } },
+        data: data.rows.map((row, index) => ({
+          name: String(row[labelKey] ?? ''),
+          value: toNumber(row[measure]) ?? 0,
+          itemStyle: {
+            color:
+              index < MAX_CATEGORICAL_SERIES
+                ? scale.get(String(row[labelKey] ?? ''))
+                : withAlpha(PALETTES[mode].categorical[0], 0.35),
+          },
+        })),
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Radar
+// ---------------------------------------------------------------------------
+
+function buildRadar(ctx: BuildContext): EChartsOption {
+  const { mode, data, encoding, style = {}, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const labelKey = encoding.x ?? data.columns[0];
+  const measure = measureColumns(ctx)[0];
+  const color = accentColor(style.accent ?? 'primary', mode);
+
+  const rows = data.rows.slice(0, 12);
+  const max = Math.max(...rows.map((row) => toNumber(row[measure]) ?? 0), 1);
+
+  return {
+    animationDuration: 480,
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'item',
+      valueFormatter: (value) => formatValue(toNumber(value), valueFormat),
+    },
+    legend: { show: false },
+    radar: {
+      indicator: rows.map((row) => ({ name: truncate(String(row[labelKey] ?? ''), 14), max })),
+      shape: 'polygon',
+      splitNumber: 4,
+      axisName: { ...baseTextStyle(mode), color: palette.textMuted },
+      splitLine: { lineStyle: { color: palette.grid, width: 1 } },
+      splitArea: { show: false },
+      axisLine: { lineStyle: { color: palette.grid } },
+    },
+    series: [
+      {
+        type: 'radar',
+        symbolSize: 8,
+        lineStyle: { width: 2, color },
+        itemStyle: { color, borderColor: palette.surface, borderWidth: 2 },
+        areaStyle: { color: withAlpha(color, 0.18) },
+        data: [
+          {
+            value: rows.map((row) => toNumber(row[measure]) ?? 0),
+            name: humanize(measure ?? 'valor'),
+          },
+        ],
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Funnel
+// ---------------------------------------------------------------------------
+
+function buildFunnel(ctx: BuildContext): EChartsOption {
+  const { mode, data, encoding, style = {}, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const labelKey = encoding.x ?? data.columns[0];
+  const measure = measureColumns(ctx)[0];
+
+  // Funnel stages are ordered, so an ordinal ramp is the correct encoding —
+  // not categorical hues. Steps stay above the 2:1 surface floor.
+  const ramp = PALETTES[mode].sequential;
+  const start = mode === 'light' ? 3 : 0;
+  const usable = mode === 'light' ? ramp.slice(start) : ramp.slice(0, ramp.length - 2);
+  const rows = data.rows.slice(0, 10);
+
+  return {
+    animationDuration: 500,
+    legend: legendConfig(style.showLegend !== false, mode, 'right'),
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'item',
+      formatter: fmt<MarkParams>(
+        (params) =>
+          `<div style="font-weight:600;margin-bottom:2px">${params.name}</div>` +
+          `${formatValue(params.value, valueFormat)} · ${params.percent.toFixed(1)}%`,
+      ),
+    },
+    series: [
+      {
+        type: 'funnel',
+        left: '6%',
+        right: '6%',
+        top: 12,
+        bottom: 12,
+        minSize: '22%',
+        gap: 2,
+        label: {
+          show: true,
+          position: 'inside',
+          color: '#ffffff',
+          fontSize: 11,
+          overflow: 'truncate',
+        },
+        labelLine: { show: false },
+        itemStyle: { borderColor: palette.surface, borderWidth: 2, borderRadius: 3 },
+        emphasis: { label: { fontWeight: 600 } },
+        data: rows.map((row, index) => ({
+          name: String(row[labelKey] ?? ''),
+          value: toNumber(row[measure]) ?? 0,
+          itemStyle: {
+            color: usable[Math.min(Math.round((index / Math.max(rows.length - 1, 1)) * (usable.length - 1)), usable.length - 1)],
+          },
+        })),
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+function legendConfig(show: boolean, mode: ThemeMode, position: 'top' | 'right' = 'top') {
+  const palette = PALETTES[mode];
+  if (!show) return { show: false };
+  const shared = {
+    show: true,
+    icon: 'roundRect' as const,
+    itemWidth: 9,
+    itemHeight: 9,
+    itemGap: 14,
+    textStyle: { ...baseTextStyle(mode), color: palette.textSecondary, fontSize: 11 },
+    inactiveColor: palette.textMuted,
+  };
+  if (position === 'right') {
+    return { ...shared, orient: 'vertical' as const, right: 8, top: 'middle' as const };
+  }
+  return { ...shared, top: 0, left: 0, padding: [0, 0, 8, 0] };
+}
+
+/**
+ * ECharts declares tooltip and label formatter params as a broad union that
+ * cannot be narrowed generically. These adapters perform the cast once, so
+ * each formatter below is written against the shape it actually receives.
+ */
+function fmt<P>(fn: (params: P) => string): (params: unknown) => string {
+  return fn as unknown as (params: unknown) => string;
+}
+
+interface MarkParams {
+  name: string;
+  value: number;
+  percent: number;
+  seriesName: string;
+  seriesType: string;
+  color: string;
+  dataIndex: number;
+}
+
+function uniqueValues(rows: DataRow[], key: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  rows.forEach((row) => {
+    const value = String(row[key] ?? '');
+    if (!seen.has(value)) {
+      seen.add(value);
+      result.push(value);
+    }
+  });
+  return result;
+}
+
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function withAlpha(color: string, alpha: number): string {
+  if (color.startsWith('#')) {
+    const hex = color.slice(1);
+    const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  if (color.startsWith('rgba')) return color.replace(/[\d.]+\)$/, `${alpha})`);
+  if (color.startsWith('rgb')) return color.replace('rgb(', 'rgba(').replace(')', `, ${alpha})`);
+  return color;
+}
+
+export { toNumber, withAlpha, uniqueValues };

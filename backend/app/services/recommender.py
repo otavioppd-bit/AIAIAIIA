@@ -233,8 +233,8 @@ def _temporal_rules(
             out.append(
                 Recommendation(
                     chart_type=LINE,
-                    title=f"{sem.humanize(pair[0])} vs {sem.humanize(pair[1])} ao longo do tempo",
-                    subtitle="Comparação de métricas na mesma escala temporal",
+                    title=f"{sem.humanize(pair[0])} vs {sem.humanize(pair[1])} — crescimento comparado",
+                    subtitle="Indexado: primeiro período = 100",
                     encoding={
                         "x": date_col,
                         "y": pair[0],
@@ -242,16 +242,19 @@ def _temporal_rules(
                         "agg": trends[(date_col, pair[0])].get("agg", "sum"),
                         "agg2": trends[(date_col, pair[1])].get("agg", "sum"),
                         "time_grain": trends[(date_col, pair[0])]["grain"],
+                        "normalize": "index_100",
                     },
                     rationale=(
-                        "Duas métricas compartilham o mesmo eixo temporal. Sobrepor as séries "
-                        "revela se elas se movem juntas — uma comparação impossível quando "
-                        "cada métrica ocupa um gráfico separado."
+                        "As duas métricas compartilham o eixo temporal, mas têm escalas "
+                        "diferentes. Em vez de dois eixos Y — cujo alinhamento é arbitrário e "
+                        "inventa correlações que não existem nos dados — ambas são indexadas "
+                        "ao primeiro período (=100) e plotadas em um único eixo, o que torna "
+                        "as taxas de crescimento diretamente comparáveis."
                     ),
-                    principle="Comparação de séries → linhas sobrepostas",
+                    principle="Escalas diferentes → indexar à base comum, nunca eixo duplo",
                     score=0.74,
                     columns=[date_col, *pair],
-                    options={"dual_axis": True},
+                    options={"normalize": "index_100"},
                 )
             )
     return out
