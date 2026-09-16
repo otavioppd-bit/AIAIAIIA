@@ -55,3 +55,21 @@ def test_registration_is_rate_limited(limited_client: TestClient):
 def test_health_endpoint_is_not_rate_limited(limited_client: TestClient):
     for _ in range(30):
         assert limited_client.get("/health").status_code == 200
+
+
+def test_forwarded_header_cannot_reset_the_rate_limit(limited_client: TestClient):
+    """X-Forwarded-For is client-controlled unless a trusted proxy sets it."""
+    from app.core.config import settings
+
+    assert settings.trust_proxy_headers is False
+
+    statuses = [
+        limited_client.post(
+            "/api/v1/auth/login",
+            json={"email": "alvo@exemplo.com", "password": f"tentativa{i}"},
+            # A fresh spoofed address on every request.
+            headers={"X-Forwarded-For": f"10.0.0.{i}"},
+        ).status_code
+        for i in range(16)
+    ]
+    assert 429 in statuses, "rotacionar X-Forwarded-For contornou a limitação"

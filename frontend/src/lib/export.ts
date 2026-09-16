@@ -125,9 +125,13 @@ export function exportRowsToCsv(
   const escape = (value: unknown): string => {
     if (value === null || value === undefined) return '';
     let text = String(value);
-    // Neutralise spreadsheet formula triggers before they reach a CSV reader.
-    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-    if (/[",\n;]/.test(text)) text = `"${text.replace(/"/g, '""')}"`;
+    // Neutralise spreadsheet formula triggers, but never a plain negative
+    // number: prefixing "-1234.5" would turn a value into text.
+    const looksLikeNumber = /^[+-]?(\d+([.,]\d+)?|[.,]\d+)$/.test(text.trim());
+    if (/^[=@\t\r]/.test(text) || (/^[+-]/.test(text) && !looksLikeNumber)) {
+      text = `'${text}`;
+    }
+    if (/[",;\n\r]/.test(text)) text = `"${text.replace(/"/g, '""')}"`;
     return text;
   };
 

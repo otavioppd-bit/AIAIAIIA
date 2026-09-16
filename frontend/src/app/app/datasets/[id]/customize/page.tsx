@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Check, Palette } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,8 +30,14 @@ export default function CustomizePage() {
   const savedSpec = useDashboardStore((state) => state.savedSpec);
   const [saving, setSaving] = useState(false);
 
+  // Reload only when the dashboard itself changes: a refetch returns a new
+  // spec object, and reloading would wipe unsaved edits and the undo stack.
+  const loadedDashboardId = useRef<string | null>(null);
   useEffect(() => {
-    if (dashboard?.spec) load(dashboard.spec);
+    if (dashboard?.spec && loadedDashboardId.current !== dashboard.id) {
+      loadedDashboardId.current = dashboard.id;
+      load(dashboard.spec);
+    }
     setEditMode(true);
     return () => setEditMode(false);
   }, [dashboard?.id, dashboard?.spec, load, setEditMode]);

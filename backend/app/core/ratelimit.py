@@ -16,10 +16,18 @@ from app.core.config import settings
 
 
 def _client_key(request: Request) -> str:
-    """Prefer the proxy-forwarded address when one is present."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Identify the caller for rate-limiting purposes.
+
+    X-Forwarded-For is attacker-controlled unless a proxy we trust sets it:
+    honouring it unconditionally would let a client rotate the header and get a
+    fresh bucket on every request, defeating the limit entirely. It is read
+    only when TRUST_PROXY_HEADERS is enabled for a deployment that really does
+    sit behind a proxy which overwrites the header.
+    """
+    if settings.trust_proxy_headers:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     return get_remote_address(request)
 
 

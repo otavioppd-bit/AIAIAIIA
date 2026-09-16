@@ -148,28 +148,78 @@ test('barras usam uma única cor por série, sem rampa de valor', () => {
   assert.ok(series.data?.every((point) => typeof point === 'number' || point === null));
 });
 
-test('o mesmo rótulo recebe a mesma cor em ordens diferentes', () => {
-  // Colour follows the entity, so filtering a series must not repaint the rest.
+test('a cor acompanha a categoria, não a posição na ordenação', () => {
+  // Re-sorting or filtering must never repaint the surviving series: a reader
+  // who learned "Beta is orange" would otherwise be misled.
+  // The profile knows every category; the chart may show only a subset.
+  const DOMAIN = ['Alpha', 'Beta', 'Gama'];
   const build = (rows: Record<string, string | number>[]) =>
     buildChartOption({
       mode: 'dark',
       chartType: 'donut',
       data: data(rows, ['categoria', 'valor']),
       encoding: { x: 'categoria', y: 'valor', agg: 'sum' },
+      colorDomain: DOMAIN,
     }) as { series?: { data?: { name: string; itemStyle: { color: string } }[] }[] };
-
-  const ascending = build([
-    { categoria: 'Alpha', valor: 1 },
-    { categoria: 'Beta', valor: 2 },
-  ]);
-  const descending = build([
-    { categoria: 'Alpha', valor: 5 },
-    { categoria: 'Beta', valor: 9 },
-  ]);
 
   const colourOf = (option: ReturnType<typeof build>, name: string) =>
     option.series?.[0]?.data?.find((point) => point.name === name)?.itemStyle.color;
 
-  assert.equal(colourOf(ascending, 'Alpha'), colourOf(descending, 'Alpha'));
-  assert.equal(colourOf(ascending, 'Beta'), colourOf(descending, 'Beta'));
+  const original = build([
+    { categoria: 'Alpha', valor: 10 },
+    { categoria: 'Beta', valor: 20 },
+    { categoria: 'Gama', valor: 30 },
+  ]);
+  // Same entities, reversed order — as a descending sort would produce.
+  const reversed = build([
+    { categoria: 'Gama', valor: 30 },
+    { categoria: 'Beta', valor: 20 },
+    { categoria: 'Alpha', valor: 10 },
+  ]);
+  // And with one entity filtered out entirely.
+  const filtered = build([
+    { categoria: 'Gama', valor: 30 },
+    { categoria: 'Alpha', valor: 10 },
+  ]);
+
+  for (const name of ['Alpha', 'Beta', 'Gama']) {
+    assert.equal(
+      colourOf(original, name),
+      colourOf(reversed, name),
+      `“${name}” trocou de cor ao inverter a ordem das linhas`,
+    );
+  }
+  for (const name of ['Alpha', 'Gama']) {
+    assert.equal(
+      colourOf(original, name),
+      colourOf(filtered, name),
+      `“${name}” foi repintada depois de filtrar outra série`,
+    );
+  }
+});
+
+test('séries de linha mantêm a cor quando a ordem das categorias muda', () => {
+  const build = (groups: string[]) =>
+    buildChartOption({
+      mode: 'dark',
+      chartType: 'line',
+      data: data(
+        groups.flatMap((grupo) => [
+          { mes: 'jan', grupo, valor: 1 },
+          { mes: 'fev', grupo, valor: 2 },
+        ]),
+        ['mes', 'grupo', 'valor'],
+      ),
+      encoding: { x: 'mes', y: 'valor', series: 'grupo', agg: 'sum' },
+      colorDomain: ['Norte', 'Sul', 'Leste'],
+    }) as { series?: { name: string; lineStyle?: { color?: string } }[] };
+
+  const colourOf = (option: ReturnType<typeof build>, name: string) =>
+    option.series?.find((serie) => serie.name === name)?.lineStyle?.color;
+
+  const a = build(['Norte', 'Sul', 'Leste']);
+  const b = build(['Leste', 'Norte', 'Sul']);
+  for (const name of ['Norte', 'Sul', 'Leste']) {
+    assert.equal(colourOf(a, name), colourOf(b, name), `“${name}” trocou de cor`);
+  }
 });

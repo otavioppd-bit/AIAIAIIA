@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import { DashboardGrid } from '@/components/dashboard/DashboardGrid';
@@ -30,9 +30,18 @@ export default function OverviewPage() {
   const resetFilters = useDashboardStore((state) => state.resetFilters);
   const setEditMode = useDashboardStore((state) => state.setEditMode);
 
-  // Load the stored spec into the editor store once per dashboard.
+  // Load the stored spec once per dashboard.
+  //
+  // Depending on the spec object itself would reload on every refetch — React
+  // Query hands back a new object each time — and `load` resets the undo stack
+  // and the saved baseline, silently discarding whatever the user was editing.
+  // The id is what identifies "a different dashboard".
+  const loadedDashboardId = useRef<string | null>(null);
   useEffect(() => {
-    if (dashboard?.spec) load(dashboard.spec);
+    if (!dashboard?.spec) return;
+    if (loadedDashboardId.current === dashboard.id) return;
+    loadedDashboardId.current = dashboard.id;
+    load(dashboard.spec);
   }, [dashboard?.id, dashboard?.spec, load]);
 
   // Leaving this screen should never strand the user in edit mode.

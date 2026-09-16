@@ -258,11 +258,11 @@ Regras aplicadas em todos os gráficos:
 ## Testes
 
 ```bash
-# Backend — 66 testes
+# Backend — 70 testes
 cd backend && ./.venv/bin/python -m pytest -q
 
 # Frontend — tipos, lint e testes dos construtores de gráfico
-cd frontend && npm run typecheck && npm run lint && npm test
+cd frontend && npm run typecheck && npm run lint && npm test   # 16 testes
 
 # Percurso completo em navegador real — 30 verificações
 # (requer API e web em execução)
@@ -294,7 +294,14 @@ neutralizadas.
   produção, mover a análise para uma fila (Celery ou RQ) evita segurar a
   conexão HTTP.
 - O rate limiting usa memória do processo. Com múltiplos workers, aponte o
-  `slowapi` para Redis via `storage_uri`.
+  `slowapi` para Redis via `storage_uri`. Atrás de um proxy reverso que
+  sobrescreva `X-Forwarded-For`, habilite `TRUST_PROXY_HEADERS=true` — sem
+  proxy, o cabeçalho é controlado pelo cliente e permitiria zerar o próprio
+  limite a cada requisição.
+- A cor de uma categoria é derivada do domínio conhecido pelo perfilamento, que
+  guarda os valores mais frequentes. Em dimensões de cardinalidade muito alta,
+  categorias fora desse conjunto podem mudar de cor ao filtrar; um mapeamento
+  persistido no dashboard resolveria o caso por completo.
 - O mapa geográfico ainda é renderizado como ranking horizontal; a projeção
   coroplética depende de incluir os GeoJSON de UF e país.
 - Exportação em PDF é uma captura do dashboard renderizado. Um relatório

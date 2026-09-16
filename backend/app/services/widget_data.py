@@ -163,13 +163,24 @@ def _index_to_100(rows: list[dict[str, Any]], measures: list[str]) -> list[dict[
     """
     if not rows:
         return rows
+
+    # "First period = 100" only means something when that first period is
+    # positive. Scanning ahead for some later positive value would silently
+    # rebase on a different period, and dividing by a negative base flips the
+    # series upside down. Measures that fail the test are left untouched.
     bases: dict[str, float] = {}
     for measure in measures:
-        for row in rows:
-            value = row.get(measure)
-            if isinstance(value, (int, float)) and value not in (0, None):
-                bases[measure] = float(value)
-                break
+        first = next(
+            (
+                row[measure]
+                for row in rows
+                if isinstance(row.get(measure), (int, float))
+                and not isinstance(row.get(measure), bool)
+            ),
+            None,
+        )
+        if isinstance(first, (int, float)) and first > 0:
+            bases[measure] = float(first)
 
     indexed: list[dict[str, Any]] = []
     for row in rows:
@@ -177,10 +188,8 @@ def _index_to_100(rows: list[dict[str, Any]], measures: list[str]) -> list[dict[
         for measure in measures:
             base = bases.get(measure)
             value = row.get(measure)
-            if base and isinstance(value, (int, float)):
+            if base and isinstance(value, (int, float)) and not isinstance(value, bool):
                 new_row[measure] = round(float(value) / base * 100, 2)
-            elif measure in new_row:
-                new_row[measure] = None
         indexed.append(new_row)
     return indexed
 

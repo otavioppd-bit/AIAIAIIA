@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { IconButton } from '@/components/ui/Button';
 
@@ -21,6 +21,13 @@ export function PresentationMode({
   subtitle?: string;
   children: React.ReactNode;
 }) {
+  // `onExit` is an inline arrow at the call site, so a new identity on every
+  // render. Holding it in a ref keeps the effect keyed on `active` alone —
+  // otherwise each render would exit and re-request fullscreen, and the second
+  // request has no user gesture behind it, dropping the presenter out.
+  const exitRef = useRef(onExit);
+  exitRef.current = onExit;
+
   useEffect(() => {
     if (!active) return undefined;
 
@@ -29,7 +36,7 @@ export function PresentationMode({
     document.body.style.overflow = 'hidden';
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onExit();
+      if (event.key === 'Escape') exitRef.current();
     };
     document.addEventListener('keydown', onKeyDown);
 
@@ -45,7 +52,7 @@ export function PresentationMode({
         void document.exitFullscreen?.().catch(() => undefined);
       }
     };
-  }, [active, onExit]);
+  }, [active]);
 
   if (!active) return null;
 

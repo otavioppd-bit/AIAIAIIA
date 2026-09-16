@@ -483,3 +483,14 @@ def test_ask_rejects_an_oversized_question(auth_client: TestClient, uploaded_dat
         f"/api/v1/datasets/{dataset_id}/ask", json={"question": "a" * 5000}
     )
     assert response.status_code == 422
+
+
+def test_health_does_not_disclose_the_configured_provider(client: TestClient):
+    """The probe is anonymous, so it must not name the model backend."""
+    client.headers.pop("Authorization", None)
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert set(body["llm"].keys()) == {"mode"}
+    serialised = str(body).lower()
+    for leaked in ("anthropic", "openai", "claude", "gpt", "rule-based"):
+        assert leaked not in serialised, f"/health expôs “{leaked}”"

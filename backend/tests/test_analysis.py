@@ -62,6 +62,19 @@ def test_additivity_falls_back_to_distribution_shape():
     assert by_name["outro_campo"].detail["default_agg"] == "sum"
 
 
+def test_left_skewed_measurements_are_not_summed():
+    """A bounded score leans left; that is still a measurement, not an amount."""
+    rng = np.random.default_rng(7)
+    # Scores bunched against a ceiling with a thin lower tail: strongly
+    # left-skewed, and still a measurement.
+    scores = np.clip(100 - rng.gamma(shape=1.4, scale=3.0, size=800), 0, 100)
+    frame = pd.DataFrame({"indicador_x": scores})
+    _, semantics = sem.analyse_schema(frame)
+    column = semantics[0]
+    assert column.detail["distribution_shape"]["skew"] < -1
+    assert column.detail["default_agg"] == "mean"
+
+
 def test_named_measures_beat_the_distribution_heuristic():
     """An explicit name always wins: shape only breaks a tie."""
     rng = np.random.default_rng(2)
@@ -198,3 +211,23 @@ def test_geo_column_is_detected_from_uf_values():
     uf = next(s for s in semantics if s.name == "uf")
     assert uf.semantic_type == sem.GEO
     assert uf.detail["geo_kind"] == "state"
+
+
+def test_indexing_to_100_requires_a_positive_base():
+    """Dividing by a negative or zero base would invert or erase the series."""
+    from app.services.widget_data import _index_to_100
+
+    rows = [
+        {"mes": "01", "lucro": -100.0, "receita": 200.0, "zerada": 0.0},
+        {"mes": "02", "lucro": -50.0, "receita": 300.0, "zerada": 0.0},
+        {"mes": "03", "lucro": 150.0, "receita": 400.0, "zerada": 0.0},
+    ]
+    indexed = _index_to_100(rows, ["lucro", "receita", "zerada"])
+
+    # The revenue series has a positive first value and is rebased.
+    assert [row["receita"] for row in indexed] == [100.0, 150.0, 200.0]
+    # Profit starts negative: rebasing there would plot a recovery as a fall,
+    # so the raw values are kept.
+    assert [row["lucro"] for row in indexed] == [-100.0, -50.0, 150.0]
+    # An all-zero measure has no base; it stays a flat line rather than vanishing.
+    assert [row["zerada"] for row in indexed] == [0.0, 0.0, 0.0]

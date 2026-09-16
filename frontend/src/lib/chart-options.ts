@@ -35,6 +35,11 @@ export interface BuildContext {
     accent?: string;
     colorScheme?: string;
   };
+  /**
+   * Every value the colour dimension can take, from the column profile. Lets a
+   * filtered view keep the same hues as the unfiltered one.
+   */
+  colorDomain?: string[];
   valueFormat?: ValueFormat;
   compact?: boolean;
   options?: Record<string, unknown>;
@@ -171,7 +176,7 @@ function buildLine(ctx: BuildContext, filled: boolean): EChartsOption {
     // Long format: one line per distinct value of the series column.
     categories = uniqueValues(data.rows, xKey);
     const groups = uniqueValues(data.rows, seriesKey).slice(0, MAX_CATEGORICAL_SERIES);
-    scale.seed(groups);
+    seedStable(scale, groups, ctx.colorDomain);
     const measure = measures[0];
     series = groups.map((group, index) => ({
       name: group,
@@ -197,7 +202,7 @@ function buildLine(ctx: BuildContext, filled: boolean): EChartsOption {
   } else {
     categories = data.rows.map((row) => String(row[xKey] ?? ''));
     const lineMeasures = measures.slice(0, MAX_CATEGORICAL_SERIES);
-    scale.seed(lineMeasures);
+    seedStable(scale, lineMeasures);
     series = lineMeasures.map((measure, index) => ({
       name: humanize(measure),
       type: 'line',
@@ -325,7 +330,7 @@ function buildBar(
   if (seriesKey) {
     categories = uniqueValues(rows, xKey);
     const groups = uniqueValues(rows, seriesKey).slice(0, MAX_CATEGORICAL_SERIES);
-    scale.seed([...groups].sort());
+    seedStable(scale, groups, ctx.colorDomain);
     series = groups.map((group) => ({
       name: group,
       type: 'bar',
@@ -441,7 +446,7 @@ function buildPie(ctx: BuildContext, donut: boolean): EChartsOption {
 
   const rows = data.rows.slice(0, MAX_CATEGORICAL_SERIES);
   const scale = createColorScale(mode);
-  scale.seed(rows.map((row) => String(row[labelKey] ?? '')));
+  seedStable(scale, rows.map((row) => String(row[labelKey] ?? '')), ctx.colorDomain);
 
   const total = rows.reduce((sum, row) => sum + (toNumber(row[measure]) ?? 0), 0);
 
@@ -515,7 +520,7 @@ function buildScatter(ctx: BuildContext): EChartsOption {
     // Scatter puts every pair of hues on screen at once, so only the slots
     // that clear the all-pairs gate are used; the rest folds into "Outros".
     const groups = uniqueValues(data.rows, seriesKey).slice(0, ALL_PAIRS_SAFE_SLOTS);
-    scale.seed(groups);
+    seedStable(scale, groups, ctx.colorDomain);
     groups.forEach((group) => {
       series.push({
         name: group,
@@ -881,7 +886,7 @@ function buildTreemap(ctx: BuildContext): EChartsOption {
   const measure = measureColumns(ctx)[0];
   const scale = createColorScale(mode);
   const labels = data.rows.map((row) => String(row[labelKey] ?? ''));
-  scale.seed(labels.slice(0, MAX_CATEGORICAL_SERIES));
+  seedStable(scale, labels.slice(0, MAX_CATEGORICAL_SERIES), ctx.colorDomain);
 
   return {
     animationDuration: 500,
@@ -1057,6 +1062,30 @@ function legendConfig(show: boolean, mode: ThemeMode, position: 'top' | 'right' 
     return { ...shared, orient: 'vertical' as const, right: 8, top: 'middle' as const };
   }
   return { ...shared, top: 0, left: 0, padding: [0, 0, 8, 0] };
+}
+
+/**
+ * Seeds a colour scale so a slot belongs to the entity, not to the query.
+ *
+ * Sorting the visible keys is not enough on its own: filtering a series out
+ * changes the *set*, which would shift every survivor by one slot. So the
+ * column's full domain — which the profile already knows — is seeded first
+ * when it is available. A reader who learned "Sudeste is blue" keeps that
+ * regardless of sort order or which other regions are on screen.
+ *
+ * Beyond the profiled domain (a very high-cardinality dimension) the visible
+ * keys govern, which is the best that can be done without a stored mapping.
+ */
+function seedStable(
+  scale: ReturnType<typeof createColorScale>,
+  keys: string[],
+  domain?: string[],
+): void {
+  const byName = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
+  if (domain && domain.length > 0) {
+    scale.seed([...new Set(domain)].sort(byName));
+  }
+  scale.seed([...new Set(keys)].sort(byName));
 }
 
 /**

@@ -88,6 +88,18 @@ export function ChartRenderer({
     [encoding, columnProfiles],
   );
 
+  /**
+   * The full set of values the colour dimension can take. Passing it keeps a
+   * filtered chart painting each category the same hue as the unfiltered one.
+   */
+  const colorDomain = useMemo(() => {
+    const column = encoding.series ?? encoding.x;
+    if (!column) return undefined;
+    const profile = columnProfiles.find((item) => item.name === column);
+    const values = profile?.stats?.top_values ?? profile?.detail?.top_values;
+    return values?.map((entry) => entry.value);
+  }, [encoding.series, encoding.x, columnProfiles]);
+
   const option = useMemo(() => {
     if (!data || data.rows.length === 0) return null;
     return buildChartOption({
@@ -98,11 +110,12 @@ export function ChartRenderer({
       style,
       options,
       valueFormat,
+      colorDomain,
     });
     // `style` and `options` are plain objects rebuilt on each render; their
     // stringified form is what actually changes the chart.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, mode, chartType, JSON.stringify(encoding), JSON.stringify(style), JSON.stringify(options), valueFormat]);
+  }, [data, mode, chartType, JSON.stringify(encoding), JSON.stringify(style), JSON.stringify(options), valueFormat, colorDomain]);
 
   if (!inlineData && query.isLoading) {
     return <ChartSkeleton className={className} />;

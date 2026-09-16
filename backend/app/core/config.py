@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     password_reset_expire_minutes: int = 30
     jwt_algorithm: str = "HS256"
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # Enable only when a reverse proxy in front of the app overwrites
+    # X-Forwarded-For. Otherwise the header is client-controlled and would let
+    # anyone reset their own rate-limit bucket.
+    trust_proxy_headers: bool = False
 
     # --- Storage ---------------------------------------------------------
     database_url: str = Field(default=f"sqlite:///{BASE_DIR / 'storage' / 'prisma.db'}")

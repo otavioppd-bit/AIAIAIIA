@@ -121,11 +121,17 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
 
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health() -> HealthResponse:
+    """Liveness probe.
+
+    Anonymous by necessity (load balancers call it), so it discloses only
+    whether a model backend is configured — never which one. The provider and
+    model names live behind auth at /api/v1/ai/status.
+    """
     return HealthResponse(
         status="ok",
         version=VERSION,
         environment=settings.environment,
-        llm=provider_status(),
+        llm={"mode": provider_status()["mode"]},
     )
 
 

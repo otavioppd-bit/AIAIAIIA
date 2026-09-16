@@ -123,13 +123,17 @@ def infer_additivity(
 
     if shape:
         zero_ratio = shape.get("zero_ratio", 0.0)
-        skew = abs(shape.get("skew", 0.0))
+        skew = shape.get("skew", 0.0)
         cv = shape.get("cv")
-        # Zeros and a long right tail are what transactional amounts look like.
-        if zero_ratio > 0.1 or skew > 1.5:
-            return True
+        # A tight spread around a non-zero centre is a measurement, whichever
+        # way it leans — a bounded score skews *left* and must not be summed.
+        # This is checked first for that reason.
         if cv is not None and cv < 0.5:
             return False
+        # Zeros and a long *right* tail are what transactional amounts look
+        # like; a left tail says nothing of the sort.
+        if zero_ratio > 0.1 or skew > 1.5:
+            return True
 
     return True
 

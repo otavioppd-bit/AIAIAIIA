@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local development runner: starts the API and the web app together.
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 start_api() {
   cd "$ROOT/backend"
