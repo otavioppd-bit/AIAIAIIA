@@ -1,0 +1,33 @@
+# --- Web framework -------------------------------------------------------
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# --- Data processing -----------------------------------------------------
+pandas==2.2.3
+numpy==2.2.1
+pyarrow==18.1.0
+scipy==1.14.1
+python-dateutil==2.9.0.post0
+chardet==5.2.0
+
+# --- Persistence ---------------------------------------------------------
+SQLAlchemy==2.0.36
+alembic==1.14.0
+psycopg2-binary==2.9.10
+
+# --- Security ------------------------------------------------------------
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+PyJWT==2.10.1
+email-validator==2.2.0
+slowapi==0.1.9
+
+# --- LLM providers (optional at runtime) ---------------------------------
+httpx==0.28.1
+
+# --- Testing -------------------------------------------------------------
+pytest==8.3.4
+pytest-asyncio==0.25.0
