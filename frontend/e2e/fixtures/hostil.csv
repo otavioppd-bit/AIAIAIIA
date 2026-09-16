@@ -1,0 +1,5 @@
+categoria,valor_total
+"<img src=x onerror=""window.__XSS_FIRED=true"">",1500
+"<script>window.__XSS_FIRED=true</script>",900
+"Categoria normal",2300
+"=cmd|'/c calc'!A1",1200

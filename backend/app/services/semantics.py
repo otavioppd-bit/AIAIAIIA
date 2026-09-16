@@ -92,12 +92,26 @@ _NON_ADDITIVE_WORDS = {
 _ADDITIVE_OVERRIDE_WORDS = {
     "total", "soma", "sum", "faturamento", "receita", "revenue", "gmv",
     "quantidade", "qtd", "qty", "quantity", "count", "contagem", "volume",
-    "unidades", "units", "acumulado", "subtotal",
+    "unidades", "units", "acumulado", "subtotal", "falta", "faltas",
+    "absence", "absences", "ocorrencias", "vendidos", "itens", "items",
+    "transacoes", "transactions", "pedidos", "orders",
 }
 
 
-def infer_additivity(name: str, semantic_type: str) -> bool:
-    """Whether summing this column across rows yields a meaningful number."""
+def infer_additivity(
+    name: str,
+    semantic_type: str,
+    shape: dict[str, float] | None = None,
+) -> bool:
+    """Whether summing this column across rows yields a meaningful number.
+
+    The column name is the strongest signal. When it gives none, the shape of
+    the distribution decides, because the two failure modes are not symmetric:
+    showing the mean of an additive column is merely less useful, while showing
+    the sum of a measurement (a temperature, a sensor reading, a score) is
+    meaningless. Readings cluster tightly around a non-zero centre; transaction
+    amounts are right-skewed and full of small or zero values.
+    """
     if semantic_type == PERCENTAGE:
         return False
     if semantic_type not in NUMERIC_TYPES:
@@ -106,12 +120,41 @@ def infer_additivity(name: str, semantic_type: str) -> bool:
         return True
     if _matches(name, _NON_ADDITIVE_WORDS):
         return False
+
+    if shape:
+        zero_ratio = shape.get("zero_ratio", 0.0)
+        skew = abs(shape.get("skew", 0.0))
+        cv = shape.get("cv")
+        # Zeros and a long right tail are what transactional amounts look like.
+        if zero_ratio > 0.1 or skew > 1.5:
+            return True
+        if cv is not None and cv < 0.5:
+            return False
+
     return True
 
 
-def default_aggregation(name: str, semantic_type: str) -> str:
+def default_aggregation(
+    name: str, semantic_type: str, shape: dict[str, float] | None = None
+) -> str:
     """The aggregation an analyst would reach for by default."""
-    return "sum" if infer_additivity(name, semantic_type) else "mean"
+    return "sum" if infer_additivity(name, semantic_type, shape) else "mean"
+
+
+def _distribution_shape(values: pd.Series) -> dict[str, float] | None:
+    """Cheap descriptors used only to break an additivity tie."""
+    clean = pd.to_numeric(values, errors="coerce").dropna()
+    if clean.size < 20:
+        return None
+    mean = float(clean.mean())
+    std = float(clean.std(ddof=1)) if clean.size > 1 else 0.0
+    shape: dict[str, float] = {
+        "zero_ratio": float((clean == 0).mean()),
+        "skew": float(clean.skew()) if clean.size > 2 else 0.0,
+    }
+    if mean != 0:
+        shape["cv"] = abs(std / mean)
+    return shape
 
 
 _BOOL_TRUE = {"true", "verdadeiro", "sim", "yes", "y", "s", "1", "t"}
@@ -436,8 +479,11 @@ def infer_column(name: str, series: pd.Series, row_count: int) -> tuple[ColumnSe
 
     aggregatable = role == METRIC and sem_type in NUMERIC_TYPES
     if aggregatable:
-        detail["additive"] = infer_additivity(name, sem_type)
-        detail["default_agg"] = default_aggregation(name, sem_type)
+        shape = _distribution_shape(coerced)
+        detail["additive"] = infer_additivity(name, sem_type, shape)
+        detail["default_agg"] = default_aggregation(name, sem_type, shape)
+        if shape:
+            detail["distribution_shape"] = {k: round(v, 4) for k, v in shape.items()}
 
     # Keep integer-typed columns on an integer dtype so category labels render
     # as "3" rather than "3.0".

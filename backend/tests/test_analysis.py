@@ -40,6 +40,45 @@ def test_non_additive_columns_use_mean_not_sum():
     assert sem.default_aggregation("quantidade", sem.INTEGER) == "sum"
 
 
+def test_additivity_falls_back_to_distribution_shape():
+    """A column whose name says nothing is judged by how its values behave."""
+    rng = np.random.default_rng(1)
+    frame = pd.DataFrame(
+        {
+            # Readings: tight around a non-zero centre, symmetric.
+            "sensor_a": rng.normal(50, 9, 600),
+            "leitura_xyz": rng.normal(23, 2.5, 600),
+            # Amounts: right-skewed, or full of zeros.
+            "campo_opaco": np.abs(rng.lognormal(7, 1.1, 600)),
+            "outro_campo": np.where(rng.random(600) < 0.3, 0, np.abs(rng.lognormal(3, 1, 600))),
+        }
+    )
+    _, semantics = sem.analyse_schema(frame)
+    by_name = {c.name: c for c in semantics}
+
+    assert by_name["sensor_a"].detail["default_agg"] == "mean"
+    assert by_name["leitura_xyz"].detail["default_agg"] == "mean"
+    assert by_name["campo_opaco"].detail["default_agg"] == "sum"
+    assert by_name["outro_campo"].detail["default_agg"] == "sum"
+
+
+def test_named_measures_beat_the_distribution_heuristic():
+    """An explicit name always wins: shape only breaks a tie."""
+    rng = np.random.default_rng(2)
+    frame = pd.DataFrame(
+        {
+            # Looks like a reading, but the name says it is a total.
+            "valor_total": rng.normal(500, 40, 400),
+            # Looks like an amount, but the name says it is a rate.
+            "taxa_x": np.abs(rng.lognormal(1, 1.2, 400)),
+        }
+    )
+    _, semantics = sem.analyse_schema(frame)
+    by_name = {c.name: c for c in semantics}
+    assert by_name["valor_total"].detail["default_agg"] == "sum"
+    assert by_name["taxa_x"].detail["default_agg"] == "mean"
+
+
 def test_correlation_survives_extreme_outliers():
     """Pearson collapses under a few extreme values; Spearman must catch it."""
     rng = np.random.default_rng(3)

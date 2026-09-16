@@ -30,8 +30,12 @@ _MAX_MESSAGES_PER_CONVERSATION = 200
 
 
 @router.get("/ai/status")
-def ai_status() -> dict:
-    """Tells the UI whether a model is configured or rules are in use."""
+def ai_status(user: CurrentUser) -> dict:
+    """Tells the UI whether a model is configured or rules are in use.
+
+    Behind auth: the provider and model names are deployment detail and do not
+    belong in an anonymous response.
+    """
     return provider_status()
 
 

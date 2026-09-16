@@ -258,14 +258,33 @@ Regras aplicadas em todos os gráficos:
 ## Testes
 
 ```bash
-cd backend && ./.venv/bin/python -m pytest -q          # 59 testes
-cd frontend && npm run typecheck && npm run lint       # tipos e lint
+# Backend — 66 testes
+cd backend && ./.venv/bin/python -m pytest -q
+
+# Frontend — tipos, lint e testes dos construtores de gráfico
+cd frontend && npm run typecheck && npm run lint && npm test
+
+# Percurso completo em navegador real — 30 verificações
+# (requer API e web em execução)
+cd frontend && npm run build && npm start &
+npm run e2e
 ```
 
 A suíte do backend cobre ingestão (encoding, separadores, formatos brasileiros,
 injeção de fórmula), correção analítica (períodos parciais, aditividade,
 robustez da correlação a outliers, coerência entre insight e dado), integridade
 da especificação do dashboard, isolamento entre usuários e rate limiting.
+
+Os testes do frontend verificam que os tooltips escapam rótulos vindos do
+arquivo — o ECharts renderiza o retorno do formatter como HTML —, que nenhum
+gráfico declara um segundo eixo Y e que a cor acompanha a entidade.
+
+O percurso E2E sobe um navegador de verdade e passa por cadastro, upload,
+geração do dashboard, edição com salvamento, chat, exploração, qualidade,
+relatório, troca de tema, modo apresentação e responsividade. Inclui um
+arquivo hostil (`e2e/fixtures/hostil.csv`) que verifica, no produto rodando,
+que rótulos com markup não executam script e que fórmulas de planilha são
+neutralizadas.
 
 ---
 

@@ -413,3 +413,73 @@ def test_non_additive_metrics_are_never_summed_in_the_dashboard(
             assert additive.get(kpi["column"], True), (
                 f"KPI soma “{kpi['column']}”, que não é uma medida aditiva"
             )
+
+
+# --- Security --------------------------------------------------------------
+
+def test_path_traversal_in_identifiers_is_rejected(auth_client: TestClient):
+    """Storage paths derive from validated IDs, never from user-supplied text."""
+    for candidate in ["../../etc/passwd", "..%2f..%2fetc", "a" * 40, "'; DROP TABLE users--"]:
+        response = auth_client.get(f"/api/v1/datasets/{candidate}")
+        assert response.status_code in {404, 422}, f"{candidate} não foi rejeitado"
+
+
+def test_dataset_rows_of_another_user_are_not_reachable(
+    client: TestClient, auth_client: TestClient, uploaded_dataset: dict
+):
+    dataset_id = uploaded_dataset["dataset"]["id"]
+    other = client.post(
+        "/api/v1/auth/register",
+        json={"email": "outro@exemplo.com", "password": "SenhaSegura123"},
+    ).json()
+    headers = {"Authorization": f"Bearer {other['access_token']}"}
+
+    # Every dataset-scoped route must refuse, including the derived ones.
+    for path in [
+        f"/api/v1/datasets/{dataset_id}/profile",
+        f"/api/v1/datasets/{dataset_id}/quality",
+        f"/api/v1/datasets/{dataset_id}/insights",
+        f"/api/v1/datasets/{dataset_id}/export/csv",
+        f"/api/v1/datasets/{dataset_id}/export/report",
+        f"/api/v1/datasets/{dataset_id}/explore/fields",
+        f"/api/v1/datasets/{dataset_id}/suggested-questions",
+    ]:
+        assert client.get(path, headers=headers).status_code == 404, path
+
+    assert client.post(
+        f"/api/v1/datasets/{dataset_id}/ask",
+        json={"question": "Qual produto vendeu mais?"},
+        headers=headers,
+    ).status_code == 404
+    assert client.post(
+        f"/api/v1/datasets/{dataset_id}/widget-data",
+        json={"chart_type": "bar", "encoding": {"x": "produto"}},
+        headers=headers,
+    ).status_code == 404
+
+
+def test_ai_status_requires_authentication(client: TestClient):
+    client.headers.pop("Authorization", None)
+    assert client.get("/api/v1/ai/status").status_code == 401
+
+
+def test_query_limits_are_clamped(auth_client: TestClient, uploaded_dataset: dict):
+    """A crafted limit must not turn one request into an unbounded scan."""
+    dataset_id = uploaded_dataset["dataset"]["id"]
+    response = auth_client.post(
+        f"/api/v1/datasets/{dataset_id}/widget-data",
+        json={
+            "chart_type": "bar",
+            "encoding": {"x": "produto", "y": "valor_total", "agg": "sum"},
+            "limit": 10_000_000,
+        },
+    )
+    assert response.status_code == 422  # rejected by the schema bound
+
+
+def test_ask_rejects_an_oversized_question(auth_client: TestClient, uploaded_dataset: dict):
+    dataset_id = uploaded_dataset["dataset"]["id"]
+    response = auth_client.post(
+        f"/api/v1/datasets/{dataset_id}/ask", json={"question": "a" * 5000}
+    )
+    assert response.status_code == 422

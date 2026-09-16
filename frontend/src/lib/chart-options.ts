@@ -453,7 +453,7 @@ function buildPie(ctx: BuildContext, donut: boolean): EChartsOption {
       trigger: 'item',
       formatter: fmt<MarkParams>(
         (params) =>
-          `<div style="font-weight:600;margin-bottom:2px">${params.name}</div>` +
+          `<div style="font-weight:600;margin-bottom:2px">${escapeHtml(params.name)}</div>` +
           `${formatValue(params.value, valueFormat)} · ${params.percent.toFixed(1)}%`,
       ),
     },
@@ -575,10 +575,10 @@ function buildScatter(ctx: BuildContext): EChartsOption {
       formatter: fmt<{ value: [number, number]; seriesName: string; color: string }>(
         (params) =>
           `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">` +
-          `<span style="width:8px;height:8px;border-radius:50%;background:${params.color}"></span>` +
-          `<strong>${params.seriesName}</strong></div>` +
-          `${humanize(String(xKey))}: ${formatValue(params.value[0], 'decimal')}<br/>` +
-          `${humanize(String(yKey))}: ${formatValue(params.value[1], valueFormat)}`,
+          `<span style="width:8px;height:8px;border-radius:50%;background:${escapeHtml(params.color)}"></span>` +
+          `<strong>${escapeHtml(params.seriesName)}</strong></div>` +
+          `${escapeHtml(humanize(String(xKey)))}: ${formatValue(params.value[0], 'decimal')}<br/>` +
+          `${escapeHtml(humanize(String(yKey)))}: ${formatValue(params.value[1], valueFormat)}`,
       ),
     },
     xAxis: {
@@ -628,7 +628,7 @@ function buildHistogram(ctx: BuildContext): EChartsOption {
       axisPointer: { type: 'shadow', shadowStyle: { color: withAlpha(palette.textPrimary, 0.05) } },
       formatter: fmt<MarkParams[]>((params) => {
         const first = params[0];
-        return `<div style="font-weight:600;margin-bottom:2px">${first.name}</div>${formatValue(
+        return `<div style="font-weight:600;margin-bottom:2px">${escapeHtml(first.name)}</div>${formatValue(
           first.value,
           'integer',
         )} registros`;
@@ -708,7 +708,7 @@ function buildBoxPlot(ctx: BuildContext): EChartsOption {
         }
         const [, min, q1, median, q3, max] = params.value;
         return (
-          `<div style="font-weight:600;margin-bottom:4px">${params.name}</div>` +
+          `<div style="font-weight:600;margin-bottom:4px">${escapeHtml(params.name)}</div>` +
           `Máximo: ${formatValue(max, valueFormat)}<br/>` +
           `Q3: ${formatValue(q3, valueFormat)}<br/>` +
           `<strong>Mediana: ${formatValue(median, valueFormat)}</strong><br/>` +
@@ -801,9 +801,9 @@ function buildHeatmap(ctx: BuildContext): EChartsOption {
         const label = isCorrelation
           ? `r = ${value === null ? '—' : value.toFixed(2)}`
           : formatValue(value, valueFormat);
-        return `<div style="font-weight:600;margin-bottom:2px">${humanize(
-          xCategories[xi] ?? '',
-        )} × ${humanize(yCategories[yi] ?? '')}</div>${label}`;
+        return `<div style="font-weight:600;margin-bottom:2px">${escapeHtml(
+          humanize(xCategories[xi] ?? ''),
+        )} × ${escapeHtml(humanize(yCategories[yi] ?? ''))}</div>${label}`;
       }),
     },
     // Correlation is polarity: diverging, two opposite hues, neutral midpoint.
@@ -889,7 +889,7 @@ function buildTreemap(ctx: BuildContext): EChartsOption {
       ...tooltipBase(mode),
       formatter: fmt<MarkParams>(
         (params) =>
-          `<div style="font-weight:600;margin-bottom:2px">${params.name}</div>${formatValue(
+          `<div style="font-weight:600;margin-bottom:2px">${escapeHtml(params.name)}</div>${formatValue(
             params.value,
             valueFormat,
           )}`,
@@ -1002,7 +1002,7 @@ function buildFunnel(ctx: BuildContext): EChartsOption {
       trigger: 'item',
       formatter: fmt<MarkParams>(
         (params) =>
-          `<div style="font-weight:600;margin-bottom:2px">${params.name}</div>` +
+          `<div style="font-weight:600;margin-bottom:2px">${escapeHtml(params.name)}</div>` +
           `${formatValue(params.value, valueFormat)} · ${params.percent.toFixed(1)}%`,
       ),
     },
@@ -1057,6 +1057,24 @@ function legendConfig(show: boolean, mode: ThemeMode, position: 'top' | 'right' 
     return { ...shared, orient: 'vertical' as const, right: 8, top: 'middle' as const };
   }
   return { ...shared, top: 0, left: 0, padding: [0, 0, 8, 0] };
+}
+
+/**
+ * Escapes text that is interpolated into a tooltip.
+ *
+ * ECharts renders a tooltip formatter's return value as HTML, and category
+ * labels come straight from the uploaded file — so a cell containing markup
+ * would otherwise execute in the page. Values reaching a tooltip pass through
+ * here; everything drawn on the canvas (axes, legends, data labels) is painted
+ * as text and needs no escaping.
+ */
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /**
