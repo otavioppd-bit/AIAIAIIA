@@ -134,10 +134,17 @@ def _kpi_widget(kpi: dict[str, Any], index: int, cursor: _LayoutCursor) -> dict[
         "config": {
             "chart_type": "kpi",
             "encoding": {"y": kpi.get("column"), "agg": kpi.get("agg", "count")},
+            # The card renders entirely from this payload, so it carries the
+            # label and provenance rather than relying on the widget title.
             "kpi": {
+                "id": kpi.get("id", ""),
+                "label": kpi["label"],
                 "value": kpi["value"],
                 "format": kpi["format"],
+                "column": kpi.get("column"),
+                "agg": kpi.get("agg", "count"),
                 "delta": kpi.get("delta"),
+                "rationale": kpi.get("rationale", ""),
                 "icon": _kpi_icon(kpi),
             },
             "style": _style(index, shadow="sm", showLegend=False, showGrid=False),
@@ -166,7 +173,7 @@ def _narrative_widget(narrative: dict[str, Any], cursor: _LayoutCursor) -> dict[
         "type": "narrative",
         "title": narrative.get("headline", "Resumo executivo"),
         "subtitle": "",
-        "layout": cursor.place(12, 1),
+        "layout": cursor.place(12, 2),
         "config": {
             "chart_type": "narrative",
             "encoding": {},

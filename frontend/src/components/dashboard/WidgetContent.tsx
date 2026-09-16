@@ -6,13 +6,10 @@ import { ChartRenderer } from '@/components/charts/ChartRenderer';
 import { DataTable } from '@/components/charts/DataTable';
 import { InsightCard } from '@/components/charts/InsightCard';
 import { KpiCard } from '@/components/charts/KpiCard';
-import { Scene } from '@/components/three/Scene';
-import { DataOrb } from '@/components/three/DataOrb';
+import { LazyDataOrb } from '@/components/three/LazyDataOrb';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
-import { PALETTES } from '@/lib/palette';
-import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 import type { ColumnProfile, Widget } from '@/types/api';
 
@@ -33,8 +30,6 @@ export function WidgetContent({
   rowCount = 0,
   qualityScore = 100,
 }: WidgetContentProps) {
-  const { mode } = useTheme();
-
   switch (widget.type) {
     case 'kpi':
       return widget.config.kpi ? (
@@ -95,22 +90,11 @@ export function WidgetContent({
 
     case 'scene3d':
       return (
-        <Scene
+        <LazyDataOrb
           className="h-full w-full"
-          camera={{ position: [0, 0, 6.2], fov: 42 }}
-          fallback={
-            <div className="flex h-full items-center justify-center text-xs text-ink-subtle">
-              Visualização 3D indisponível neste dispositivo.
-            </div>
-          }
-        >
-          <DataOrb
-            recordCount={rowCount}
-            coherence={qualityScore / 100}
-            accent={PALETTES[mode].categorical[0]}
-            secondary={PALETTES[mode].categorical[2]}
-          />
-        </Scene>
+          recordCount={rowCount}
+          coherence={qualityScore / 100}
+        />
       );
 
     case 'chart':
@@ -203,7 +187,7 @@ function TableWidget({
       columns={visible}
       rows={data.rows}
       columnProfiles={columnProfiles}
-      maxHeight={9999}
+      maxHeight="fill"
       className="h-full border-0"
     />
   );

@@ -11,7 +11,8 @@ interface DataTableProps {
   columns: string[];
   rows: DataRow[];
   columnProfiles?: ColumnProfile[];
-  maxHeight?: number;
+  /** A pixel cap, or 'fill' to take the height of a constrained parent. */
+  maxHeight?: number | 'fill';
   sortable?: boolean;
   className?: string;
   emptyMessage?: string;
@@ -87,9 +88,21 @@ export function DataTable({
 
   const items = virtualizer.getVirtualItems();
 
+  const fills = maxHeight === 'fill';
+
   return (
-    <div className={cn('overflow-hidden rounded-md border border-line', className)}>
-      <div ref={containerRef} className="overflow-auto" style={{ maxHeight }}>
+    <div
+      className={cn(
+        'overflow-hidden rounded-md border border-line',
+        fills && 'flex h-full flex-col',
+        className,
+      )}
+    >
+      <div
+        ref={containerRef}
+        className={cn('overflow-auto', fills && 'min-h-0 flex-1')}
+        style={fills ? undefined : { maxHeight }}
+      >
         <table className="w-full border-collapse text-[13px]">
           <thead className="sticky top-0 z-10">
             <tr className="bg-surface-sunken">

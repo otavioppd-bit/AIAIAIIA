@@ -65,9 +65,13 @@ export function WidgetShell({
         transform: CSS.Translate.toString(transform),
         transition,
         gridColumn: `span ${span} / span ${span}`,
-        minHeight: height,
+        // A definite height is what makes the grid a grid: content scrolls
+        // inside its card instead of stretching the page.
+        height,
         zIndex: isDragging ? 40 : undefined,
       }}
+      data-widget-type={widget.type}
+      data-widget-id={widget.id}
       className={cn(
         'group/widget relative flex flex-col overflow-hidden transition-[border-color,box-shadow] duration-200',
         style.border && 'border border-line',

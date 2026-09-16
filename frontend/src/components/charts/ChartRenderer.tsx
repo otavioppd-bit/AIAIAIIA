@@ -158,7 +158,7 @@ export function ChartRenderer({
             columns={tableColumns}
             rows={data.rows}
             columnProfiles={columnProfiles}
-            maxHeight={9999}
+            maxHeight="fill"
             className="h-full border-0"
           />
         </div>

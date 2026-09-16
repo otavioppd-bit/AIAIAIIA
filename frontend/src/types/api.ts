@@ -418,16 +418,21 @@ export interface DashboardSpec {
   meta: Record<string, unknown>;
 }
 
-export interface Dashboard {
+/** What `GET /dashboards` returns: metadata only, never the widget spec. */
+export interface DashboardSummary {
   id: string;
   dataset_id: string;
   name: string;
   description: string;
   theme: string;
   is_primary: boolean;
-  spec: DashboardSpec;
   created_at: string;
   updated_at: string;
+}
+
+/** What `GET /dashboards/{id}` returns: the summary plus the full spec. */
+export interface Dashboard extends DashboardSummary {
+  spec: DashboardSpec;
 }
 
 export interface DashboardVersion {
@@ -514,6 +519,16 @@ export interface ExploreField {
   default_agg?: Aggregation;
   additive?: boolean;
   options: string[];
+}
+
+export type FilterOperator =
+  | 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'not_in'
+  | 'contains' | 'not_contains' | 'between' | 'is_null' | 'not_null';
+
+export interface ExploreFilter {
+  column: string;
+  op: FilterOperator;
+  value: unknown;
 }
 
 export interface ExploreFieldsResponse {

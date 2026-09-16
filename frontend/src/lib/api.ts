@@ -11,6 +11,7 @@ import type {
   Conversation,
   Dashboard,
   DashboardSpec,
+  DashboardSummary,
   DashboardVersion,
   DatasetDetail,
   DatasetSummary,
@@ -265,8 +266,9 @@ export const api = {
   },
 
   dashboards: {
+    // Returns summaries without the spec; use `get` for the full dashboard.
     list: (datasetId?: string) =>
-      request<Dashboard[]>(`/dashboards${datasetId ? `?dataset_id=${datasetId}` : ''}`),
+      request<DashboardSummary[]>(`/dashboards${datasetId ? `?dataset_id=${datasetId}` : ''}`),
 
     get: (id: string) => request<Dashboard>(`/dashboards/${id}`),
 

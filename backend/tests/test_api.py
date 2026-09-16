@@ -350,3 +350,66 @@ def test_health_endpoint(client: TestClient):
     body = client.get("/health").json()
     assert body["status"] == "ok"
     assert "llm" in body
+
+
+# --- Dashboard spec integrity ---------------------------------------------
+
+def test_kpi_widgets_carry_their_own_label(auth_client: TestClient, uploaded_dataset: dict):
+    """The KPI card renders from config.kpi alone, so the label must be there."""
+    spec = auth_client.get(f"/api/v1/dashboards/{uploaded_dataset['dashboard_id']}").json()["spec"]
+    kpis = [w for w in spec["widgets"] if w["type"] == "kpi"]
+    assert kpis, "nenhum KPI no dashboard gerado"
+    for widget in kpis:
+        payload = widget["config"]["kpi"]
+        assert payload["label"], f"KPI {widget['id']} sem rótulo"
+        assert payload["value"] is not None
+        assert payload["format"] in {"currency", "percent", "integer", "decimal"}
+
+
+def test_every_widget_declares_a_usable_layout(auth_client: TestClient, uploaded_dataset: dict):
+    spec = auth_client.get(f"/api/v1/dashboards/{uploaded_dataset['dashboard_id']}").json()["spec"]
+    columns = spec["grid"]["columns"]
+    for widget in spec["widgets"]:
+        layout = widget["layout"]
+        assert 1 <= layout["w"] <= columns, f"{widget['id']} com largura inválida"
+        assert 1 <= layout["h"] <= 6, f"{widget['id']} com altura inválida"
+
+
+def test_chart_widgets_reference_real_columns(auth_client: TestClient, uploaded_dataset: dict):
+    """A widget encoding a column that does not exist would render an error."""
+    dataset = uploaded_dataset["dataset"]
+    names = {c["name"] for c in dataset["profile"]["columns"]}
+    spec = auth_client.get(f"/api/v1/dashboards/{uploaded_dataset['dashboard_id']}").json()["spec"]
+
+    for widget in spec["widgets"]:
+        if widget["type"] != "chart":
+            continue
+        encoding = widget["config"]["encoding"]
+        for key in ("x", "y", "series"):
+            column = encoding.get(key)
+            if column:
+                assert column in names, f"{widget['id']} referencia coluna inexistente: {column}"
+
+
+def test_non_additive_metrics_are_never_summed_in_the_dashboard(
+    auth_client: TestClient, uploaded_dataset: dict
+):
+    dataset = uploaded_dataset["dataset"]
+    additive = {
+        c["name"]: (c.get("detail") or {}).get("additive", True)
+        for c in dataset["profile"]["columns"]
+    }
+    spec = auth_client.get(f"/api/v1/dashboards/{uploaded_dataset['dashboard_id']}").json()["spec"]
+
+    for widget in spec["widgets"]:
+        encoding = widget["config"].get("encoding") or {}
+        column, agg = encoding.get("y"), encoding.get("agg")
+        if column and agg == "sum":
+            assert additive.get(column, True), (
+                f"{widget['id']} soma “{column}”, que não é uma medida aditiva"
+            )
+        kpi = widget["config"].get("kpi")
+        if kpi and kpi.get("agg") == "sum" and kpi.get("column"):
+            assert additive.get(kpi["column"], True), (
+                f"KPI soma “{kpi['column']}”, que não é uma medida aditiva"
+            )
