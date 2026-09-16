@@ -13,7 +13,43 @@ import { api, ApiError } from '@/lib/api';
 import { buildChartOption } from '@/lib/chart-options';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
+import { formatValue, humanize } from '@/lib/format';
 import type { AnalystChart, ChatMessage, ColumnProfile } from '@/types/api';
+
+const CHART_LABELS: Record<string, string> = {
+  line: 'Linha', area: 'Área', bar: 'Barras', bar_horizontal: 'Barras horizontais',
+  stacked_bar: 'Barras empilhadas', scatter: 'Dispersão', donut: 'Rosca', pie: 'Pizza',
+  histogram: 'Histograma', box_plot: 'Box plot', heatmap: 'Mapa de calor',
+  treemap: 'Treemap', radar: 'Radar', funnel: 'Funil', table: 'Tabela', kpi: 'Indicador',
+};
+
+/**
+ * The hero-number form. When the answer is a single value, the value is the
+ * whole visualisation — a one-bar bar chart would say nothing more.
+ */
+function SingleValue({ chart }: { chart: AnalystChart }) {
+  const columns = chart.inline_data?.columns ?? [];
+  const row = chart.inline_data?.rows[0];
+  if (!row || columns.length === 0) return null;
+
+  const measure = columns[columns.length - 1];
+  const dimension = columns.length > 1 ? columns[0] : null;
+  const value = row[measure];
+
+  return (
+    <div className="mt-3 rounded-md border border-line bg-surface p-4">
+      {dimension && (
+        <p className="truncate text-xs text-ink-subtle" title={String(row[dimension])}>
+          {humanize(dimension)}: <span className="text-ink-muted">{String(row[dimension])}</span>
+        </p>
+      )}
+      <p className="mt-1 truncate text-2xl font-semibold tabular-nums tracking-[-0.03em]">
+        {typeof value === 'number' ? formatValue(value, 'auto', { compact: true }) : String(value)}
+      </p>
+      <p className="mt-0.5 text-xs text-ink-subtle">{humanize(measure)}</p>
+    </div>
+  );
+}
 
 interface ChatPanelProps {
   datasetId: string;
@@ -235,8 +271,13 @@ function MessageBubble({
   const followUps = message.payload?.follow_ups ?? [];
   const source = message.payload?.source;
 
+  // A one-row answer is a number, not a plot: rendering it as a single bar
+  // would be a chart with nothing to compare against.
+  const isSingleValue =
+    chart?.chart_type === 'kpi' || (chart?.inline_data?.rows.length ?? 0) === 1;
+
   const option =
-    chart?.inline_data && chart.inline_data.rows.length > 0
+    chart?.inline_data && chart.inline_data.rows.length > 0 && !isSingleValue
       ? buildChartOption({
           mode,
           chartType: chart.chart_type,
@@ -290,13 +331,17 @@ function MessageBubble({
         >
           <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink">{message.content}</p>
 
+          {chart && isSingleValue && chart.inline_data?.rows[0] && (
+            <SingleValue chart={chart} />
+          )}
+
           {option && chart && (
             <div className="mt-3">
               <div className="h-56 rounded-md border border-line bg-surface p-2">
                 <EChart option={option} resetKey={chart.chart_type} />
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge tone="neutral">{chart.chart_type}</Badge>
+                <Badge tone="neutral">{CHART_LABELS[chart.chart_type] ?? chart.chart_type}</Badge>
                 {onAddChart && (
                   <Button size="xs" variant="secondary" onClick={() => onAddChart(chart)}>
                     Adicionar ao dashboard

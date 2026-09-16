@@ -260,9 +260,12 @@ class DataAnalyst:
 
         group_col = result.columns[0]
         top = rows[0]
+        label = sem.humanize(metric_name).lower()
+        superlative = "maior" if plan.sort_desc else "menor"
+
         parts = [
-            f"O maior valor de {sem.humanize(metric_name).lower()} está em "
-            f"“{top.get(group_col)}”, com {insights_mod._fmt(top.get(metric_name), stype)}."
+            f"“{top.get(group_col)}” tem o {superlative} {label}: "
+            f"{insights_mod._fmt(top.get(metric_name), stype)}."
         ]
         if len(rows) > 1:
             runners = ", ".join(
@@ -270,10 +273,18 @@ class DataAnalyst:
                 for r in rows[1:4]
             )
             parts.append(f"Na sequência: {runners}.")
+
         total_groups = result.row_count
-        if total_groups > len(rows):
+        # A question like "which month was highest?" asks for one row on
+        # purpose; reporting it as a truncation would read as a limitation.
+        asked_for_one = plan.limit == 1
+        if total_groups > len(rows) and not asked_for_one:
             parts.append(f"Foram encontrados {total_groups} grupos no total.")
-        parts.extend(result.notes)
+        elif asked_for_one and total_groups > 1:
+            parts.append(f"Comparado com outros {total_groups - 1} períodos ou categorias.")
+
+        if not asked_for_one:
+            parts.extend(result.notes)
         return " ".join(parts)
 
     # --- Analysis-backed intents ------------------------------------------
@@ -454,7 +465,9 @@ class DataAnalyst:
     ) -> dict[str, Any] | None:
         if plan.chart_type in (None, "none") or not result.rows:
             return None
-        if len(result.rows) == 1 and plan.chart_type not in {"kpi"}:
+        # When the answer is one value, that value *is* the chart — a lone bar
+        # carries no comparison and only spends space.
+        if len(result.rows) == 1:
             chart_type = "kpi"
         else:
             chart_type = plan.chart_type
