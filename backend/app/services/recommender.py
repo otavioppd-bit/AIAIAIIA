@@ -106,7 +106,7 @@ def recommend(
     profile: dict[str, Any],
     analysis: dict[str, Any],
     domain_info: dict[str, Any],
-    max_charts: int = 12,
+    max_charts: int = 14,
 ) -> list[dict[str, Any]]:
     """Return the ranked, de-duplicated set of recommended visualisations."""
     buckets = _columns_by_role(profile)
@@ -131,6 +131,8 @@ def recommend(
     candidates += _distribution_rules(metrics)
     candidates += _geo_rules(analysis, metrics, dimensions, profile)
     candidates += _cross_dimension_rules(frame, metrics, dimensions)
+    candidates += _funnel_rules(profile, metrics)
+    candidates += _radar_rules(metrics, dimensions)
 
     candidates.sort(key=lambda c: c.score, reverse=True)
     selected = _deduplicate(candidates, max_charts)
@@ -643,6 +645,140 @@ def _cross_dimension_rules(
             )
         )
     return out
+
+
+# --- Rule: sequential process (funnel) -------------------------------------
+
+# Canonical, ordered pipeline stages. A metric matching a tier is a *stage*;
+# stage order comes from this list's order, never from magnitude — a funnel's
+# defining principle is sequence, and a later stage that outscores an earlier
+# one (bad data, a mislabelled column) is a Data Quality problem to surface,
+# not a reason to silently reorder the chart.
+_FUNNEL_STAGE_TIERS: tuple[tuple[str, ...], ...] = (
+    ("impressao", "impressoes", "impression", "impressions", "alcance", "reach"),
+    (
+        "visita", "visitas", "visit", "visits", "sessao", "sessoes", "session",
+        "sessions", "trafego", "traffic", "clique", "cliques", "click", "clicks",
+        "visualizacao", "visualizacoes", "view", "views",
+    ),
+    (
+        "lead", "leads", "cadastro", "cadastros", "signup", "signups",
+        "inscricao", "inscricoes", "registration", "contato", "contatos",
+    ),
+    (
+        "oportunidade", "oportunidades", "opportunity", "opportunities",
+        "qualificado", "qualificados", "qualified", "proposta", "propostas",
+        "proposal", "orcamento", "orcamentos", "quote", "quotes",
+    ),
+    (
+        "venda", "vendas", "sale", "sales", "conversao", "conversoes",
+        "conversion", "conversions", "cliente", "clientes", "customer",
+        "customers", "pedido", "pedidos", "order", "orders", "fechamento",
+        "fechamentos", "compra", "compras", "purchase", "purchases",
+    ),
+)
+
+
+def _funnel_rules(profile: dict[str, Any], metrics: list[dict[str, Any]]) -> list[Recommendation]:
+    """Principle: a sequential process with falling volume at each step is a
+    funnel — the width of each bar encodes what fraction of the previous
+    stage survived, which a bar or line chart cannot show directly."""
+    by_slug = {sem.slugify(m["name"]): m for m in metrics}
+    staged: list[dict[str, Any]] = []
+    used_slugs: set[str] = set()
+
+    for tier in _FUNNEL_STAGE_TIERS:
+        match = next(
+            (
+                by_slug[slug]
+                for slug in by_slug
+                if slug not in used_slugs and any(slug == kw or kw in slug.split("_") for kw in tier)
+            ),
+            None,
+        )
+        if match is not None:
+            staged.append(match)
+            used_slugs.add(sem.slugify(match["name"]))
+
+    # A funnel needs at least three stages, and every stage must be a flow
+    # count or amount (additive) — a conversion *rate* is not a stage.
+    staged = [m for m in staged if (m.get("detail") or {}).get("additive", True)]
+    if len(staged) < 3:
+        return []
+
+    column_names = [m["name"] for m in staged]
+    stage_labels = [sem.humanize(name) for name in column_names]
+    first, last = staged[0], staged[-1]
+    first_stats, last_stats = first.get("stats") or {}, last.get("stats") or {}
+    overall_rate = None
+    if first_stats.get("sum") and last_stats.get("sum") is not None:
+        overall_rate = last_stats["sum"] / first_stats["sum"] * 100 if first_stats["sum"] else None
+
+    subtitle = f"{len(staged)} etapas"
+    if overall_rate is not None:
+        subtitle += f" · conversão total {overall_rate:.1f}%"
+
+    return [
+        Recommendation(
+            chart_type=FUNNEL,
+            title=f"Funil de {stage_labels[0].lower()} até {stage_labels[-1].lower()}",
+            subtitle=subtitle,
+            encoding={"metrics": column_names, "labels": stage_labels, "agg": "sum"},
+            rationale=(
+                f"As colunas {', '.join(column_names)} nomeiam etapas reconhecíveis de um "
+                "processo sequencial, na ordem em que um registro normalmente passa por "
+                "elas. Um funil mostra a retenção degrau a degrau — a largura de cada "
+                "barra é proporcional ao volume que chegou até ali — algo que barras "
+                "lado a lado não comunicam diretamente."
+            ),
+            principle="Processo sequencial com etapas → funil",
+            score=0.7 + (min(0.1, (100 - overall_rate) / 1000) if overall_rate else 0),
+            columns=column_names,
+        )
+    ]
+
+
+# --- Rule: many metrics, few entities (radar) -------------------------------
+
+def _radar_rules(
+    metrics: list[dict[str, Any]], dimensions: list[dict[str, Any]]
+) -> list[Recommendation]:
+    """Principle: comparing a handful of entities across several metrics at
+    once is a shape-comparison problem — each entity becomes a polygon, each
+    metric an axis — that no single-metric chart (bar, donut) can pose at
+    all, because those only ever plot one measure at a time."""
+    if len(metrics) < 3:
+        return []
+    # A cardinality with a genuine "top few" to compare, small enough that
+    # three overlapping polygons stay legible (the categorical palette's
+    # all-pairs-safe range is 3 slots, for the same readability reason).
+    candidates = [d for d in dimensions if 3 <= d["unique_count"] <= 40]
+    if not candidates:
+        return []
+    dim = candidates[0]
+    top_metrics = metrics[:5]
+    metric_names = [m["name"] for m in top_metrics]
+    metric_labels = [sem.humanize(name).lower() for name in metric_names]
+
+    return [
+        Recommendation(
+            chart_type=RADAR,
+            title=f"Comparativo de {sem.humanize(dim['name']).lower()} em {len(top_metrics)} métricas",
+            subtitle="Top 3 · cada eixo normalizado de 0 a 100",
+            encoding={"x": dim["name"], "metrics": metric_names, "limit": 3},
+            rationale=(
+                f"Há {len(top_metrics)} métricas disponíveis e “{dim['name']}” é uma "
+                f"dimensão com {dim['unique_count']} valores — o bastante para ter um "
+                "“top 3” significativo. Um radar sobrepõe as três entidades líderes como "
+                f"polígonos, um eixo por métrica ({', '.join(metric_labels)}), revelando "
+                "o perfil de cada uma de um jeito que gráficos de uma métrica só, como "
+                "barra ou donut, não conseguem mostrar de uma vez."
+            ),
+            principle="Múltiplas métricas, poucas entidades → radar normalizado",
+            score=0.56,
+            columns=[dim["name"], *metric_names],
+        )
+    ]
 
 
 # --- KPI selection --------------------------------------------------------

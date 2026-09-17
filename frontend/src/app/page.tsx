@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import {
   ArrowRight, BarChart3, Bot, Brain, Check, Compass, Database,
-  FileSpreadsheet, Gauge, Lock, Palette, Shield, Sparkles, Upload, Zap,
+  FileSpreadsheet, Gauge, Lock, Palette, Shield, Sparkles, TrendingUp, Upload, Zap,
 } from 'lucide-react';
 import { LandingNav } from '@/components/landing/Nav';
 import { DashboardPreview } from '@/components/landing/DashboardPreview';
@@ -213,8 +213,11 @@ export default function LandingPage() {
               <p className="text-2xs font-semibold uppercase tracking-wide text-primary">
                 Exemplo de insight
               </p>
-              <p className="mt-3 text-[15px] font-semibold leading-snug">
-                📈 Receita cresceu 18,4% em 9 meses
+              <p className="mt-3 flex items-center gap-2 text-[15px] font-semibold leading-snug">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-positive/10 text-positive">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                </span>
+                Receita cresceu 18,4% em 9 meses
               </p>
               <p className="mt-2 text-[13px] leading-relaxed text-ink-muted">
                 Receita cresceu 18,4% ao longo de 9 meses, saindo de R$ 412.000 em jan/2025 para

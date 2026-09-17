@@ -231,3 +231,108 @@ def test_indexing_to_100_requires_a_positive_base():
     assert [row["lucro"] for row in indexed] == [-100.0, -50.0, 150.0]
     # An all-zero measure has no base; it stays a flat line rather than vanishing.
     assert [row["zerada"] for row in indexed] == [0.0, 0.0, 0.0]
+
+
+def test_funnel_rule_detects_sequential_stages_in_order():
+    """A recognisable pipeline (impressions → clicks → leads → sales) becomes
+    a funnel, staged in process order — never re-sorted by magnitude."""
+    rng = np.random.default_rng(11)
+    n = 400
+    frame = pd.DataFrame(
+        {
+            "campanha": rng.choice(["Busca", "Social", "Display"], n),
+            "impressoes": rng.integers(1000, 50000, n),
+            "cliques": rng.integers(50, 3000, n),
+            "leads": rng.integers(5, 400, n),
+            "vendas": rng.integers(0, 40, n),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    funnel = next(
+        (r for r in bundle.analysis["recommendations"] if r["chart_type"] == "funnel"), None
+    )
+    assert funnel is not None, "um pipeline reconhecível deveria gerar um funil"
+    assert funnel["encoding"]["metrics"] == ["impressoes", "cliques", "leads", "vendas"]
+
+    from app.services import widget_data
+
+    result = widget_data.resolve(
+        bundle.frame, bundle.profile, bundle.analysis,
+        chart_type="funnel", encoding=funnel["encoding"],
+    )
+    labels = [row["label"] for row in result["rows"]]
+    assert labels == ["Impressoes", "Cliques", "Leads", "Vendas"]
+    # Each stage's value is the real sum of that column — never invented.
+    assert result["rows"][0]["value"] == pytest.approx(float(frame["impressoes"].sum()))
+
+
+def test_funnel_rule_requires_at_least_three_additive_stages():
+    """Two stages, or a stage that is a rate rather than a count, must not
+    produce a funnel — the chart would misrepresent what it claims to show."""
+    frame = pd.DataFrame(
+        {
+            "cliques": [100, 200, 150, 300, 90],
+            "vendas": [10, 20, 15, 30, 9],
+            "outra_coluna": [5.0, 6.0, 7.0, 8.0, 9.0],
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    funnel = next(
+        (r for r in bundle.analysis["recommendations"] if r["chart_type"] == "funnel"), None
+    )
+    assert funnel is None
+
+
+def test_radar_rule_compares_top_entities_across_normalised_metrics():
+    """With several metrics and a moderate-cardinality dimension, a radar
+    compares the leading entities on a common 0-100 scale per axis."""
+    rng = np.random.default_rng(5)
+    n = 600
+    frame = pd.DataFrame(
+        {
+            "produto": rng.choice(["A", "B", "C", "D", "E"], n),
+            "receita": rng.uniform(100, 9000, n).round(2),
+            "quantidade": rng.integers(1, 50, n),
+            "avaliacao": rng.uniform(1, 5, n).round(1),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    radar = next(
+        (r for r in bundle.analysis["recommendations"] if r["chart_type"] == "radar"), None
+    )
+    assert radar is not None
+    assert radar["encoding"]["x"] == "produto"
+    assert set(radar["encoding"]["metrics"]) <= {"receita", "quantidade", "avaliacao"}
+
+    from app.services import widget_data
+
+    result = widget_data.resolve(
+        bundle.frame, bundle.profile, bundle.analysis,
+        chart_type="radar", encoding=radar["encoding"],
+    )
+    assert len(result["rows"]) == 3, "deve trazer o top 3 de entidades, não todas"
+    metric_keys = [ind["key"] for ind in result["meta"]["indicators"]]
+    for row in result["rows"]:
+        for key in metric_keys:
+            # Every axis is bounded to the 0-100 scale the chart expects...
+            assert 0 <= row[key] <= 100
+            # ...while the raw value travels alongside for the tooltip.
+            assert f"{key}_raw" in row
+    # At least one entity should sit at exactly 100 on its leading metric —
+    # that is the leader the normalisation is anchored to.
+    assert any(row[metric_keys[0]] == 100.0 for row in result["rows"])
+
+
+def test_radar_rule_needs_at_least_three_metrics():
+    frame = pd.DataFrame(
+        {
+            "produto": ["A", "B", "C", "D"] * 20,
+            "receita": list(range(80)),
+            "quantidade": list(range(80)),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    radar = next(
+        (r for r in bundle.analysis["recommendations"] if r["chart_type"] == "radar"), None
+    )
+    assert radar is None

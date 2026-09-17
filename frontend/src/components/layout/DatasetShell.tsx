@@ -17,13 +17,13 @@ import { formatInteger } from '@/lib/format';
 import type { DatasetDetail } from '@/types/api';
 
 const NAV_ITEMS = [
-  { segment: 'overview', label: 'Overview', icon: LayoutGrid, emoji: '📊' },
-  { segment: 'analytics', label: 'Analytics', icon: BarChart3, emoji: '📈' },
-  { segment: 'explore', label: 'Explore', icon: Compass, emoji: '🔍' },
-  { segment: 'analyst', label: 'AI Analyst', icon: Bot, emoji: '🤖' },
-  { segment: 'quality', label: 'Data Quality', icon: SprayCan, emoji: '🧹' },
-  { segment: 'customize', label: 'Customize', icon: Palette, emoji: '🎨' },
-  { segment: 'reports', label: 'Reports', icon: FileText, emoji: '📄' },
+  { segment: 'overview', label: 'Overview', icon: LayoutGrid },
+  { segment: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { segment: 'explore', label: 'Explore', icon: Compass },
+  { segment: 'analyst', label: 'AI Analyst', icon: Bot },
+  { segment: 'quality', label: 'Data Quality', icon: SprayCan },
+  { segment: 'customize', label: 'Customize', icon: Palette },
+  { segment: 'reports', label: 'Reports', icon: FileText },
 ] as const;
 
 interface DatasetShellProps {

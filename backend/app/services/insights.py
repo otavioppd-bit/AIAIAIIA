@@ -125,13 +125,13 @@ def _trend_insights(analysis: dict[str, Any], types: dict[str, str]) -> list[dic
         consistent = (trend.get("r_squared") or 0) > 0.5
 
         if trend["direction"] == "up":
-            icon, sentiment = "📈", _SENTIMENT_POSITIVE
+            sentiment = _SENTIMENT_POSITIVE
             verb = "cresceu"
         elif trend["direction"] == "down":
-            icon, sentiment = "📉", _SENTIMENT_NEGATIVE
+            sentiment = _SENTIMENT_NEGATIVE
             verb = "caiu"
         else:
-            icon, sentiment = "➖", _SENTIMENT_NEUTRAL
+            sentiment = _SENTIMENT_NEUTRAL
             verb = "permaneceu estável"
 
         if trend["direction"] == "flat":
@@ -153,8 +153,9 @@ def _trend_insights(analysis: dict[str, Any], types: dict[str, str]) -> list[dic
         out.append(
             build_insight(
                 kind=TREND,
-                title=f"{icon} {metric} {verb} {_pct(abs(change))}" if trend["direction"] != "flat"
-                else f"{icon} {metric} estável no período",
+                title=f"{sem.humanize(metric)} {verb} {_pct(abs(change))}"
+                if trend["direction"] != "flat"
+                else f"{sem.humanize(metric)} estável no período",
                 description=description,
                 sentiment=sentiment,
                 importance=0.55 + 0.35 * magnitude + (0.1 if consistent else 0.0),
@@ -183,7 +184,7 @@ def _trend_insights(analysis: dict[str, Any], types: dict[str, str]) -> list[dic
                 out.append(
                     build_insight(
                         kind=DISTRIBUTION,
-                        title=f"🔺 Pico de {metric} em {best['label']}",
+                        title=f"Pico de {sem.humanize(metric)} em {best['label']}",
                         description=(
                             f"O melhor período ({best['label']}, "
                             f"{_fmt(best['value'], stype)}) foi {_pct(spread)} superior ao "
@@ -218,7 +219,7 @@ def _anomaly_insights(analysis: dict[str, Any], types: dict[str, str]) -> list[d
         out.append(
             build_insight(
                 kind=ANOMALY,
-                title=f"⚠️ {anomaly['direction'].capitalize()} atípica de "
+                title=f"{anomaly['direction'].capitalize()} atípica de "
                 f"{_pct(abs(change))} em {anomaly['period']}",
                 description=(
                     f"{metric} passou de {_fmt(anomaly['previous_value'], stype)} em "
@@ -252,7 +253,7 @@ def _concentration_insights(analysis: dict[str, Any], types: dict[str, str]) -> 
             out.append(
                 build_insight(
                     kind=CONCENTRATION,
-                    title=f"💡 {leader['label']} concentra {_pct(ratio * 100)} de {metric_label}",
+                    title=f"{leader['label']} concentra {_pct(ratio * 100)} de {metric_label}",
                     description=(
                         f"Entre {breakdown['distinct']} valores de {dimension}, "
                         f"“{leader['label']}” responde por {_fmt(leader['value'], stype)} "
@@ -276,7 +277,7 @@ def _concentration_insights(analysis: dict[str, Any], types: dict[str, str]) -> 
             out.append(
                 build_insight(
                     kind=RANKING,
-                    title=f"🏆 {leader['label']} lidera em {metric_label}",
+                    title=f"{leader['label']} lidera em {metric_label}",
                     description=(
                         f"“{leader['label']}” é o maior valor de {dimension} com "
                         f"{_fmt(leader['value'], stype)}. Os três primeiros somam "
@@ -299,7 +300,7 @@ def _concentration_insights(analysis: dict[str, Any], types: dict[str, str]) -> 
             out.append(
                 build_insight(
                     kind=COMPOSITION,
-                    title=f"📊 Efeito Pareto em {dimension}",
+                    title=f"Efeito Pareto em {sem.humanize(dimension)}",
                     description=(
                         f"20% dos valores de {dimension} concentram "
                         f"{_pct(breakdown['pareto_share'] * 100)} de {metric_label}. "
@@ -345,8 +346,8 @@ def _correlation_insights(analysis: dict[str, Any]) -> list[dict[str, Any]]:
         out.append(
             build_insight(
                 kind=CORRELATION,
-                title=f"🔗 Correlação {direction} {pair['strength']} entre "
-                f"{pair['x']} e {pair['y']}",
+                title=f"Correlação {direction} {pair['strength']} entre "
+                f"{sem.humanize(pair['x'])} e {sem.humanize(pair['y'])}",
                 description=(
                     f"O coeficiente {method_label} é {pair['coefficient']:.2f} "
                     f"({pair['sample_size']:,} registros comparáveis). "
@@ -379,7 +380,7 @@ def _distribution_insights(profile: dict[str, Any], types: dict[str, str]) -> li
             out.append(
                 build_insight(
                     kind=DISTRIBUTION,
-                    title=f"📐 {col['name']} tem distribuição assimétrica",
+                    title=f"{sem.humanize(col['name'])} tem distribuição assimétrica",
                     description=(
                         f"A média ({_fmt(mean, stype)}) difere bastante da mediana "
                         f"({_fmt(median, stype)}), com assimetria {side} "
@@ -404,7 +405,7 @@ def _distribution_insights(profile: dict[str, Any], types: dict[str, str]) -> li
             out.append(
                 build_insight(
                     kind=ANOMALY,
-                    title=f"⚠️ {outliers['count']} valor(es) fora do padrão em {col['name']}",
+                    title=f"{outliers['count']} valor(es) fora do padrão em {sem.humanize(col['name'])}",
                     description=(
                         f"{_pct(outliers['ratio'] * 100)} dos registros estão fora do "
                         f"intervalo esperado de {_fmt(outliers['lower_bound'], stype)} a "
@@ -435,7 +436,7 @@ def _quality_insights(profile: dict[str, Any], quality: dict[str, Any]) -> list[
         out.append(
             build_insight(
                 kind=QUALITY,
-                title=f"🧹 Qualidade dos dados em {score}/100 ({quality['label']})",
+                title=f"Qualidade dos dados em {score}/100 ({quality['label']})",
                 description=(
                     f"Foram identificados {critical} problema(s) de alta severidade. "
                     "Os números do dashboard podem estar distorcidos até que sejam "
@@ -451,7 +452,7 @@ def _quality_insights(profile: dict[str, Any], quality: dict[str, Any]) -> list[
         out.append(
             build_insight(
                 kind=QUALITY,
-                title=f"🧹 {overview['duplicate_rows']:,} linhas duplicadas".replace(",", "."),
+                title=f"{overview['duplicate_rows']:,} linhas duplicadas".replace(",", "."),
                 description=(
                     f"{_pct(overview['duplicate_ratio'] * 100)} das linhas são cópias exatas. "
                     "Somas e contagens estão infladas nesse percentual."
@@ -489,7 +490,7 @@ def _volume_insight(profile: dict[str, Any], domain_info: dict[str, Any]) -> lis
     return [
         build_insight(
             kind=COMPOSITION,
-            title="🗂️ Estrutura do conjunto de dados",
+            title="Estrutura do conjunto de dados",
             description="Identificamos " + ", ".join(parts) + "." + domain_note,
             sentiment=_SENTIMENT_NEUTRAL,
             importance=0.3,

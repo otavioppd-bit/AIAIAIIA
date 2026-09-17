@@ -41,6 +41,10 @@ def resolve(
         return _scatter(frame, encoding, guard, filter_specs)
     if chart_type == "heatmap" and encoding.get("matrix") == "correlation":
         return _correlation_matrix(analysis)
+    if chart_type == "funnel" and encoding.get("metrics"):
+        return _funnel_stages(frame, profile, encoding, guard, filter_specs)
+    if chart_type == "radar" and encoding.get("metrics"):
+        return _radar_multi_metric(frame, profile, encoding, guard, filter_specs)
     if chart_type == "table":
         return _table(frame, encoding, guard, filter_specs, limit)
 
@@ -395,6 +399,128 @@ def _table(
         "truncated": int(len(working)) > offset + page,
         "notes": [],
         "meta": {"chart_type": "table", "offset": offset, "limit": page},
+    }
+
+
+def _funnel_stages(
+    frame: pd.DataFrame,
+    profile: dict[str, Any],
+    encoding: dict[str, Any],
+    guard: qe.SchemaGuard,
+    filters: list[qe.Filter],
+) -> dict[str, Any]:
+    """Aggregate a list of metric columns, in the given order, into stages.
+
+    Order is semantic — earlier means earlier in the process — never re-sorted
+    by magnitude; a data-entry error that makes a later stage exceed an
+    earlier one is a Data Quality signal, not a reason to reshuffle the funnel.
+    """
+    stage_columns = [m for m in (encoding.get("metrics") or []) if guard.resolve(m)]
+    if not stage_columns:
+        return _empty("funnel", ["label", "value"])
+    resolved = [guard.require(m, what="etapa do funil") for m in stage_columns]
+
+    requested_labels = encoding.get("labels") or []
+    labels = [
+        requested_labels[i] if i < len(requested_labels) else sem.humanize(col)
+        for i, col in enumerate(resolved)
+    ]
+
+    working = _apply_filters(frame, filters, guard)
+    by_name = {c["name"]: c for c in profile["columns"]}
+
+    rows: list[dict[str, Any]] = []
+    for col, label in zip(resolved, labels, strict=True):
+        agg = (by_name[col].get("detail") or {}).get("default_agg", "sum")
+        series = pd.to_numeric(working[col], errors="coerce")
+        value = float(series.sum()) if agg == "sum" else float(series.mean())
+        rows.append({"label": label, "value": stats.safe_float(value)})
+
+    return {
+        "columns": ["label", "value"],
+        "rows": rows,
+        "row_count": len(rows),
+        "truncated": False,
+        "notes": [],
+        "meta": {"chart_type": "funnel", "stages": resolved},
+    }
+
+
+def _radar_multi_metric(
+    frame: pd.DataFrame,
+    profile: dict[str, Any],
+    encoding: dict[str, Any],
+    guard: qe.SchemaGuard,
+    filters: list[qe.Filter],
+) -> dict[str, Any]:
+    """Compare a handful of entities across several metrics at once.
+
+    Each metric is aggregated with its own additivity-aware default (never a
+    blanket sum — see `semantics.default_aggregation`) and then min-max
+    normalised to 0–100 *within the selected entities*, so a metric in the
+    millions doesn't visually flatten one in single digits. The raw value
+    travels alongside every point for the tooltip, so the normalisation never
+    shows up as a number the user has to interpret.
+    """
+    dim = guard.require(encoding.get("x"), what="dimensão do radar")
+    metric_columns = [m for m in (encoding.get("metrics") or []) if guard.resolve(m)]
+    if not metric_columns:
+        return _empty("radar", ["entity"])
+    resolved = [guard.require(m, what="métrica do radar") for m in metric_columns]
+
+    by_name = {c["name"]: c for c in profile["columns"]}
+    metric_specs = [
+        qe.MetricSpec(
+            column=col, agg=(by_name[col].get("detail") or {}).get("default_agg", "sum")
+        )
+        for col in resolved
+    ]
+
+    limit = min(int(encoding.get("limit") or 3), 6)
+    plan = qe.QueryPlan(
+        group_by=[dim],
+        metrics=metric_specs,
+        filters=filters,
+        sort_by=metric_specs[0].output_name,
+        sort_desc=True,
+        limit=limit,
+    )
+    result = qe.execute(frame, plan, guard)
+    if not result.rows:
+        return _empty("radar", ["entity", *resolved])
+
+    maxima = {
+        col: max((abs(row.get(col)) or 0) for row in result.rows) or 1 for col in resolved
+    }
+
+    rows: list[dict[str, Any]] = []
+    for row in result.rows:
+        entry: dict[str, Any] = {"entity": str(row.get(dim))}
+        for col in resolved:
+            raw = row.get(col)
+            entry[col] = round(abs(raw or 0) / maxima[col] * 100, 1) if raw is not None else 0.0
+            entry[f"{col}_raw"] = raw
+        rows.append(entry)
+
+    indicators = [
+        {
+            "key": col,
+            "label": sem.humanize(col),
+            "additive": bool((by_name[col].get("detail") or {}).get("additive", True)),
+        }
+        for col in resolved
+    ]
+
+    return {
+        "columns": ["entity", *resolved],
+        "rows": rows,
+        "row_count": len(rows),
+        "truncated": False,
+        "notes": [
+            "Cada eixo é normalizado de 0 a 100 dentro das entidades exibidas; "
+            "passe o mouse sobre o gráfico para ver o valor real."
+        ],
+        "meta": {"chart_type": "radar", "indicators": indicators, "dimension": dim},
     }
 
 

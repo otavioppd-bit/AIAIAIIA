@@ -24,6 +24,7 @@ import {
   MarkPointComponent,
   RadarComponent,
   TitleComponent,
+  ToolboxComponent,
   TooltipComponent,
   VisualMapComponent,
 } from 'echarts/components';
@@ -47,6 +48,7 @@ echarts.use([
   MarkPointComponent,
   RadarComponent,
   TitleComponent,
+  ToolboxComponent,
   TooltipComponent,
   VisualMapComponent,
   LabelLayout,

@@ -74,6 +74,8 @@ _QUANTITY_WORDS = {
     "customers", "usuarios", "users", "visitas", "visits", "cliques", "clicks",
     "sessoes", "sessions", "alunos", "students", "nota", "score", "grade",
     "frequencia", "attendance", "idade", "age", "peso", "weight", "altura",
+    "impressao", "impressoes", "impression", "impressions", "alcance", "reach",
+    "leads", "propostas", "proposals", "oportunidades", "opportunities",
 }
 
 # Measures that must never be summed: rates, unit prices, scores, ratios and

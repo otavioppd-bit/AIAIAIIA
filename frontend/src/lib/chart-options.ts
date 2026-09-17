@@ -121,6 +121,10 @@ function measureColumns(ctx: BuildContext): string[] {
 // ---------------------------------------------------------------------------
 
 export function buildChartOption(ctx: BuildContext): EChartsOption {
+  return withToolbox(ctx, buildChartOptionInner(ctx));
+}
+
+function buildChartOptionInner(ctx: BuildContext): EChartsOption {
   switch (ctx.chartType) {
     case 'line':
     case 'area':
@@ -154,6 +158,44 @@ export function buildChartOption(ctx: BuildContext): EChartsOption {
     default:
       return buildBar(ctx, 'vertical', false);
   }
+}
+
+/**
+ * Restore + save-as-image on every chart. The zoom toggle only makes sense
+ * where a `dataZoom` was actually wired in (see buildLine/buildBar/buildScatter);
+ * offering it elsewhere would open a brush that does nothing.
+ *
+ * Positioned left of the card's own "view as table" toggle (top-right, ~28px)
+ * so the two overlays never collide.
+ */
+function withToolbox(ctx: BuildContext, option: EChartsOption): EChartsOption {
+  const palette = PALETTES[ctx.mode];
+  const hasZoom = Boolean((option as { dataZoom?: unknown }).dataZoom);
+  return {
+    ...option,
+    toolbox: {
+      show: true,
+      top: 2,
+      right: 34,
+      itemSize: 13,
+      itemGap: 6,
+      iconStyle: { borderColor: palette.textMuted, borderWidth: 1.5 },
+      emphasis: { iconStyle: { borderColor: palette.textPrimary } },
+      tooltip: { ...tooltipBase(ctx.mode), padding: [4, 8] },
+      feature: {
+        ...(hasZoom
+          ? {
+              // Inherits the axis indices from the `dataZoom` array each
+              // builder already wired (category axis for bar, both for
+              // scatter) — no override needed here.
+              dataZoom: { show: true, title: { zoom: 'Zoom', back: 'Restaurar zoom' } },
+            }
+          : {}),
+        restore: { show: true, title: 'Restaurar' },
+        saveAsImage: { show: true, title: 'Salvar imagem', pixelRatio: 2 },
+      },
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +326,11 @@ function buildLine(ctx: BuildContext, filled: boolean): EChartsOption {
       ...(indexed ? { min: 'dataMin' as const } : {}),
     },
     series: series as EChartsOption['series'],
+    // A long series is hard to read compressed into one card: scroll/pinch to
+    // zoom the time range, drag to pan. No visible slider — this is a
+    // compact dashboard tile, not a full-page chart, so the interaction stays
+    // invisible until used rather than spending vertical space on a handle.
+    dataZoom: categories.length > 24 ? [{ type: 'inside', throttle: 50 }] : undefined,
   };
 }
 
@@ -428,6 +475,17 @@ function buildBar(
     xAxis: horizontal ? valueAxis : categoryAxis,
     yAxis: horizontal ? categoryAxis : valueAxis,
     series: series as EChartsOption['series'],
+    // The category axis is the one worth scrolling through — X normally,
+    // but Y once the chart is flipped horizontal — so the zoom targets
+    // whichever axis index actually carries the categories.
+    dataZoom:
+      categories.length > 16
+        ? [
+            horizontal
+              ? { type: 'inside', yAxisIndex: 0, throttle: 50 }
+              : { type: 'inside', xAxisIndex: 0, throttle: 50 },
+          ]
+        : undefined,
   };
 }
 
@@ -613,6 +671,15 @@ function buildScatter(ctx: BuildContext): EChartsOption {
       scale: true,
     },
     series: series as EChartsOption['series'],
+    // A dense point cloud benefits from zooming both axes at once, not just
+    // one — pinch/scroll on the plot area, no visible slider.
+    dataZoom:
+      data.rows.length > 60
+        ? [
+            { type: 'inside', xAxisIndex: 0, throttle: 50 },
+            { type: 'inside', yAxisIndex: 0, throttle: 50 },
+          ]
+        : undefined,
   };
 }
 
@@ -938,7 +1005,104 @@ function buildTreemap(ctx: BuildContext): EChartsOption {
 // Radar
 // ---------------------------------------------------------------------------
 
+interface RadarIndicatorMeta {
+  key: string;
+  label: string;
+  additive?: boolean;
+}
+
 function buildRadar(ctx: BuildContext): EChartsOption {
+  const indicators = ctx.data.meta?.indicators as RadarIndicatorMeta[] | undefined;
+  // The backend emits two distinct shapes under the same chart type: a
+  // multi-metric comparison (several entities, several normalised axes) when
+  // the recommender produced it, and a single-metric "profile" (one shape,
+  // one spoke per category) when a person builds it by hand in the widget
+  // editor. `meta.indicators` is only ever present on the former.
+  return Array.isArray(indicators) && indicators.length > 0
+    ? buildMultiMetricRadar(ctx, indicators)
+    : buildSingleMetricRadar(ctx);
+}
+
+/** Several entities, one polygon each, one axis per metric — all metrics
+ * normalised to a common 0-100 scale so a millions-scale metric never
+ * visually erases a single-digit one. Raw values ride along for the tooltip. */
+function buildMultiMetricRadar(ctx: BuildContext, indicators: RadarIndicatorMeta[]): EChartsOption {
+  const { mode, data, encoding, style = {} } = ctx;
+  const palette = PALETTES[mode];
+  const entityKey = encoding.x ?? 'entity';
+  const rows = data.rows.slice(0, 6);
+
+  const scale = createColorScale(mode);
+  seedStable(scale, rows.map((row) => String(row[entityKey] ?? '')), ctx.colorDomain);
+
+  const series = rows.map((row) => {
+    const entity = String(row[entityKey] ?? '');
+    const color = scale.get(entity);
+    return {
+      name: entity,
+      value: indicators.map((ind) => toNumber(row[ind.key]) ?? 0),
+      rawValues: indicators.map((ind) => toNumber(row[`${ind.key}_raw`])),
+      itemStyle: { color },
+      lineStyle: { width: 2, color },
+      areaStyle: { color: withAlpha(color, rows.length > 1 ? 0.1 : 0.18) },
+    };
+  });
+
+  return {
+    animationDuration: 480,
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'item',
+      formatter: fmt<{
+        name: string;
+        color: string;
+        data: { rawValues: (number | null)[] };
+      }>((params) => {
+        const rows_ = indicators
+          .map((ind, i) => {
+            const raw = params.data.rawValues[i];
+            const formatted =
+              raw === null
+                ? '—'
+                : formatValue(raw, ind.additive === false ? 'decimal' : 'auto', { compact: true });
+            return `<div style="display:flex;justify-content:space-between;gap:12px">` +
+              `<span>${escapeHtml(ind.label)}</span><strong>${formatted}</strong></div>`;
+          })
+          .join('');
+        return (
+          `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">` +
+          `<span style="width:8px;height:8px;border-radius:50%;background:${escapeHtml(params.color)}"></span>` +
+          `<strong>${escapeHtml(params.name)}</strong></div>${rows_}`
+        );
+      }),
+    },
+    legend: legendConfig(rows.length > 1 && style.showLegend !== false, mode, 'right'),
+    radar: {
+      indicator: indicators.map((ind) => ({ name: truncate(ind.label, 14), max: 100, min: 0 })),
+      shape: 'polygon',
+      splitNumber: 4,
+      radius: rows.length > 1 ? '62%' : '68%',
+      center: rows.length > 1 ? ['38%', '52%'] : ['50%', '52%'],
+      axisName: { ...baseTextStyle(mode), color: palette.textMuted },
+      splitLine: { lineStyle: { color: palette.grid, width: 1 } },
+      splitArea: { show: false },
+      axisLine: { lineStyle: { color: palette.grid } },
+    },
+    series: [
+      {
+        type: 'radar',
+        symbolSize: 6,
+        emphasis: { focus: 'series', lineStyle: { width: 3 } },
+        data: series,
+      },
+    ],
+  } as EChartsOption;
+}
+
+/** One shape, one spoke per category — an alternative to a bar chart for a
+ * single metric across a small set of categories, used by manual/AI-built
+ * widgets that pick "Radar" with one X and one Y. */
+function buildSingleMetricRadar(ctx: BuildContext): EChartsOption {
   const { mode, data, encoding, style = {}, valueFormat = 'decimal' } = ctx;
   const palette = PALETTES[mode];
   const labelKey = encoding.x ?? data.columns[0];

@@ -223,3 +223,147 @@ test('séries de linha mantêm a cor quando a ordem das categorias muda', () => 
     assert.equal(colourOf(a, name), colourOf(b, name), `“${name}” trocou de cor`);
   }
 });
+
+// --- Multi-metric radar -----------------------------------------------
+
+function radarData(rows: Record<string, string | number>[]): WidgetDataResponse {
+  return {
+    columns: ['entity', 'receita', 'quantidade', 'avaliacao'],
+    rows,
+    row_count: rows.length,
+    truncated: false,
+    notes: [],
+    meta: {
+      indicators: [
+        { key: 'receita', label: 'Receita', additive: true },
+        { key: 'quantidade', label: 'Quantidade', additive: true },
+        { key: 'avaliacao', label: 'Avaliação', additive: false },
+      ],
+    },
+  };
+}
+
+test('radar multi-métrica gera um polígono por entidade, valores em 0-100', () => {
+  const option = buildChartOption({
+    mode: 'dark',
+    chartType: 'radar',
+    data: radarData([
+      { entity: 'Produto A', receita: 100, quantidade: 80, avaliacao: 60, receita_raw: 90000 },
+      { entity: 'Produto B', receita: 70, quantidade: 100, avaliacao: 90, receita_raw: 63000 },
+    ]),
+    encoding: { x: 'entity' },
+  }) as { series?: { data?: { name: string; value: number[] }[] }[] };
+
+  const points = option.series?.[0]?.data ?? [];
+  assert.equal(points.length, 2);
+  for (const point of points) {
+    for (const value of point.value) {
+      assert.ok(value >= 0 && value <= 100, `valor fora de 0-100: ${value}`);
+    }
+  }
+  assert.deepEqual(
+    points.map((p) => p.name),
+    ['Produto A', 'Produto B'],
+  );
+});
+
+test('radar multi-métrica escapa nome de entidade e rótulo hostis no tooltip', () => {
+  const option = buildChartOption({
+    mode: 'dark',
+    chartType: 'radar',
+    data: {
+      columns: ['entity', 'metrica'],
+      rows: [{ entity: HOSTILE, metrica: 100, metrica_raw: 42 }],
+      row_count: 1,
+      truncated: false,
+      notes: [],
+      meta: { indicators: [{ key: 'metrica', label: HOSTILE, additive: true }] },
+    },
+    encoding: { x: 'entity' },
+  });
+  const html = runFormatter(option, {
+    name: HOSTILE,
+    color: '"><script>alert(1)</script>',
+    data: { rawValues: [42] },
+  });
+  assert.ok(!html.includes('<img'), `injetou markup cru: ${html}`);
+  assert.ok(!html.includes('<script'), `injetou script via cor: ${html}`);
+  assert.ok(html.includes('&lt;img'), 'não escapou o nome da entidade');
+});
+
+test('radar de métrica única (modo legado) continua funcionando sem meta.indicators', () => {
+  const option = buildChartOption({
+    mode: 'dark',
+    chartType: 'radar',
+    data: data(
+      [
+        { categoria: 'A', valor: 10 },
+        { categoria: 'B', valor: 20 },
+      ],
+      ['categoria', 'valor'],
+    ),
+    encoding: { x: 'categoria', y: 'valor', agg: 'sum' },
+  }) as { series?: { data?: { name: string; value: number[] }[] }[]; legend?: { show?: boolean } };
+
+  assert.equal(option.series?.[0]?.data?.length, 1, 'modo legado é uma única série');
+  assert.equal(option.legend?.show, false, 'uma única forma não precisa de legenda');
+});
+
+type ToolboxOption = {
+  toolbox?: { feature?: { dataZoom?: unknown; restore?: unknown; saveAsImage?: unknown } };
+  dataZoom?: unknown[];
+};
+
+test('todo gráfico ganha restaurar e salvar imagem na barra de ferramentas', () => {
+  const option = buildChartOption({
+    mode: 'dark',
+    chartType: 'donut',
+    data: data([{ categoria: 'A', valor: 10 }], ['categoria', 'valor']),
+    encoding: { x: 'categoria', y: 'valor', agg: 'sum' },
+  }) as ToolboxOption;
+
+  assert.ok(option.toolbox?.feature?.restore, 'faltou o botão de restaurar');
+  assert.ok(option.toolbox?.feature?.saveAsImage, 'faltou o botão de salvar imagem');
+});
+
+test('botão de zoom na barra de ferramentas só aparece onde há dataZoom de fato', () => {
+  const noZoom = buildChartOption({
+    mode: 'dark',
+    chartType: 'donut',
+    data: data([{ categoria: 'A', valor: 10 }], ['categoria', 'valor']),
+    encoding: { x: 'categoria', y: 'valor', agg: 'sum' },
+  }) as ToolboxOption;
+  assert.equal(noZoom.toolbox?.feature?.dataZoom, undefined, 'donut não deveria oferecer zoom');
+
+  const manyCategories = Array.from({ length: 30 }, (_, i) => ({ categoria: `Item ${i}`, valor: i }));
+  const zoomed = buildChartOption({
+    mode: 'dark',
+    chartType: 'bar',
+    data: data(manyCategories, ['categoria', 'valor']),
+    encoding: { x: 'categoria', y: 'valor', agg: 'sum' },
+  }) as ToolboxOption;
+  assert.ok(Array.isArray(zoomed.dataZoom) && zoomed.dataZoom.length > 0, 'faltou dataZoom com muitas categorias');
+  assert.ok(zoomed.toolbox?.feature?.dataZoom, 'faltou o botão de zoom na barra de ferramentas');
+
+  const fewCategories = buildChartOption({
+    mode: 'dark',
+    chartType: 'bar',
+    data: data([{ categoria: 'A', valor: 1 }, { categoria: 'B', valor: 2 }], ['categoria', 'valor']),
+    encoding: { x: 'categoria', y: 'valor', agg: 'sum' },
+  }) as ToolboxOption;
+  assert.equal(fewCategories.dataZoom, undefined, 'poucas categorias não deveriam ganhar dataZoom');
+  assert.equal(fewCategories.toolbox?.feature?.dataZoom, undefined, 'sem dataZoom, o botão não deveria aparecer');
+});
+
+test('barra horizontal com muitas categorias aplica zoom no eixo Y, onde as categorias moram', () => {
+  const manyCategories = Array.from({ length: 30 }, (_, i) => ({ categoria: `Item ${i}`, valor: i }));
+  const option = buildChartOption({
+    mode: 'dark',
+    chartType: 'bar_horizontal',
+    data: data(manyCategories, ['categoria', 'valor']),
+    encoding: { x: 'categoria', y: 'valor', agg: 'sum' },
+  }) as { dataZoom?: { yAxisIndex?: number; xAxisIndex?: number }[] };
+
+  assert.equal(option.dataZoom?.[0]?.yAxisIndex, 0, 'zoom deveria indexar o eixo Y na horizontal');
+  assert.equal(option.dataZoom?.[0]?.xAxisIndex, undefined, 'não deveria indexar o eixo X na horizontal');
+});

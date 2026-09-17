@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import {
-  AlertTriangle, BarChart3, ChevronDown, GitCompare, Layers,
-  Lightbulb, PieChart, Sparkles, TrendingUp, Trophy,
+  AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, ChevronDown,
+  GitCompare, Layers, Minus, PieChart, Sparkles, TrendingDown, TrendingUp, Trophy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Insight } from '@/types/api';
@@ -22,6 +22,23 @@ const KIND_META: Record<
   ranking: { icon: Trophy, label: 'Ranking' },
 };
 
+/**
+ * Direction-aware icon variants for the two kinds whose sentiment maps
+ * directly onto "up" / "down" / "flat". The backend never bakes a pictograph
+ * into the title string; this icon is the only visual carrier of direction.
+ */
+function resolveIcon(insight: Insight): React.ComponentType<{ className?: string }> {
+  if (insight.kind === 'trend') {
+    if (insight.sentiment === 'positive') return TrendingUp;
+    if (insight.sentiment === 'negative') return TrendingDown;
+    return Minus;
+  }
+  if (insight.kind === 'anomaly') {
+    return insight.sentiment === 'negative' ? ArrowDownRight : ArrowUpRight;
+  }
+  return KIND_META[insight.kind]?.icon ?? KIND_META.trend.icon;
+}
+
 const SENTIMENT_STYLES = {
   positive: 'border-l-positive',
   negative: 'border-l-negative',
@@ -36,12 +53,9 @@ const SENTIMENT_STYLES = {
 export function InsightCard({ insight, className }: { insight: Insight; className?: string }) {
   const [expanded, setExpanded] = useState(false);
   const meta = KIND_META[insight.kind] ?? KIND_META.trend;
-  const Icon = meta.icon;
+  const Icon = resolveIcon(insight);
   const method = insight.evidence?.method as string | undefined;
   const hasEvidence = Boolean(method) || insight.columns.length > 0;
-
-  // The leading emoji comes from the backend; the icon already carries the kind.
-  const title = insight.title.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}]️?\s*/u, '');
 
   return (
     <article
@@ -67,7 +81,7 @@ export function InsightCard({ insight, className }: { insight: Insight; classNam
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <h4 className="text-[13.5px] font-semibold leading-snug tracking-[-0.01em]">{title}</h4>
+            <h4 className="text-[13.5px] font-semibold leading-snug tracking-[-0.01em]">{insight.title}</h4>
             <span className="mt-0.5 shrink-0 text-2xs font-medium uppercase tracking-wide text-ink-subtle">
               {meta.label}
             </span>
