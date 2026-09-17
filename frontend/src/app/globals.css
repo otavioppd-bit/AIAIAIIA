@@ -310,17 +310,6 @@
     -webkit-text-fill-color: transparent;
   }
 
-  .grid-backdrop {
-    background-image: linear-gradient(
-        rgb(var(--color-line) / 0.5) 1px,
-        transparent 1px
-      ),
-      linear-gradient(90deg, rgb(var(--color-line) / 0.5) 1px, transparent 1px);
-    background-size: 56px 56px;
-    mask-image: radial-gradient(ellipse 80% 55% at 50% 0%, #000 55%, transparent 100%);
-    -webkit-mask-image: radial-gradient(ellipse 80% 55% at 50% 0%, #000 55%, transparent 100%);
-  }
-
   .skeleton {
     @apply relative overflow-hidden bg-surface-sunken;
   }

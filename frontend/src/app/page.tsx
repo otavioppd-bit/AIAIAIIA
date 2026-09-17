@@ -20,8 +20,6 @@ export default function LandingPage() {
       <main id="conteudo">
         {/* ── Hero ───────────────────────────────────────────────────── */}
         <section className="relative overflow-hidden pt-32 sm:pt-40">
-          <div className="grid-backdrop pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-
           <div className="relative mx-auto max-w-6xl px-5">
             <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr]">
               <div className="animate-fade-up">
