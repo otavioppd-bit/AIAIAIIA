@@ -336,3 +336,92 @@ def test_radar_rule_needs_at_least_three_metrics():
         (r for r in bundle.analysis["recommendations"] if r["chart_type"] == "radar"), None
     )
     assert radar is None
+
+
+def test_map_is_recommended_alongside_the_ranking_bar():
+    """A map adds position in real space, which no bar carries — so the two
+    are complementary readings of the same columns, not duplicate ones."""
+    rng = np.random.default_rng(7)
+    n = 400
+    frame = pd.DataFrame(
+        {
+            "uf": rng.choice(["SP", "RJ", "MG", "RS", "PR", "BA", "SC", "DF"], n),
+            "vendedor": rng.choice(["Ana", "Bruno", "Carla"], n),
+            "valor_total": rng.gamma(2, 500, n).round(2),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    recs = bundle.analysis["recommendations"]
+
+    chart_map = next((r for r in recs if r["chart_type"] == "map"), None)
+    assert chart_map is not None, "uma coluna de UFs deveria gerar um mapa"
+    assert chart_map["encoding"]["geo_kind"] == "state"
+    assert chart_map["encoding"]["x"] == "uf"
+
+    # The bar over the very same pair must survive next to it.
+    bars = [
+        r for r in recs
+        if r["chart_type"] in {"bar", "bar_horizontal"}
+        and r["encoding"].get("x") == "uf"
+        and r["encoding"].get("y") == "valor_total"
+    ]
+    assert bars, "o ranking em barras não deveria ser descartado pelo mapa"
+
+
+def test_country_values_are_recognised_without_a_country_header():
+    """Nobody names the column "pais" every time; the values have to be enough."""
+    rng = np.random.default_rng(3)
+    n = 300
+    frame = pd.DataFrame(
+        {
+            "mercado": rng.choice(
+                ["Brasil", "Argentina", "Estados Unidos", "Alemanha", "Japão", "México"], n
+            ),
+            "receita": rng.gamma(2, 900, n).round(2),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    column = next(c for c in bundle.profile["columns"] if c["name"] == "mercado")
+    assert column["semantic_type"] == sem.GEO
+    assert column["detail"]["geo_kind"] == "country"
+
+    chart_map = next(
+        (r for r in bundle.analysis["recommendations"] if r["chart_type"] == "map"), None
+    )
+    assert chart_map is not None, "países reconhecíveis deveriam gerar um mapa global"
+    assert chart_map["encoding"]["geo_kind"] == "country"
+
+
+def test_state_names_outrank_an_ambiguous_region_header():
+    """“região” names a granularity the data may not use: a column holding
+    state names is a state column whatever the header claims."""
+    rng = np.random.default_rng(5)
+    n = 300
+    frame = pd.DataFrame(
+        {
+            "regiao_cliente": rng.choice(
+                ["São Paulo", "Rio de Janeiro", "Minas Gerais", "Bahia", "Paraná"], n
+            ),
+            "receita": rng.gamma(2, 700, n).round(2),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    column = next(c for c in bundle.profile["columns"] if c["name"] == "regiao_cliente")
+    assert column["detail"]["geo_kind"] == "state"
+
+
+def test_plain_categories_never_become_a_map():
+    """A map of things that are not places is the kind of chart this engine
+    exists to avoid."""
+    rng = np.random.default_rng(9)
+    n = 200
+    frame = pd.DataFrame(
+        {
+            "categoria": rng.choice(["Eletrônicos", "Moda", "Casa", "Livros"], n),
+            "receita": rng.gamma(2, 300, n).round(2),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    column = next(c for c in bundle.profile["columns"] if c["name"] == "categoria")
+    assert column["semantic_type"] != sem.GEO
+    assert all(r["chart_type"] != "map" for r in bundle.analysis["recommendations"])

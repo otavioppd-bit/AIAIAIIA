@@ -8,7 +8,9 @@ import { ChartSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IconButton } from '@/components/ui/Button';
 import { useWidgetData } from '@/hooks/useWidgetData';
+import { useGeoMap } from '@/hooks/useGeoMap';
 import { buildChartOption } from '@/lib/chart-options';
+import { geoScopeFor } from '@/lib/geo-names';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 import { ApiError } from '@/lib/api';
@@ -100,6 +102,15 @@ export function ChartRenderer({
     return values?.map((entry) => entry.value);
   }, [encoding.series, encoding.x, columnProfiles]);
 
+  // Only a map needs geometry, and only the scope its column implies. A widget
+  // built by hand in the editor carries no `geo_kind`, so the column's own
+  // profile answers for it.
+  const geoKind =
+    encoding.geo_kind ??
+    columnProfiles.find((column) => column.name === encoding.x)?.detail?.geo_kind;
+  const geoScope = chartType === 'map' ? geoScopeFor(geoKind) : null;
+  const geoMap = useGeoMap(geoScope);
+
   const option = useMemo(() => {
     if (!data || data.rows.length === 0) return null;
     return buildChartOption({
@@ -111,13 +122,23 @@ export function ChartRenderer({
       options,
       valueFormat,
       colorDomain,
+      geo:
+        geoScope && geoMap.data
+          ? { scope: geoScope, aliases: geoMap.data.aliases }
+          : undefined,
     });
     // `style` and `options` are plain objects rebuilt on each render; their
     // stringified form is what actually changes the chart.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, mode, chartType, JSON.stringify(encoding), JSON.stringify(style), JSON.stringify(options), valueFormat, colorDomain]);
+  }, [data, mode, chartType, JSON.stringify(encoding), JSON.stringify(style), JSON.stringify(options), valueFormat, colorDomain, geoScope, geoMap.data]);
 
   if (!inlineData && query.isLoading) {
+    return <ChartSkeleton className={className} />;
+  }
+
+  // Without this the card would paint the bar fallback for a frame and then
+  // swap to a map once the geometry lands.
+  if (geoScope && geoMap.isLoading) {
     return <ChartSkeleton className={className} />;
   }
 

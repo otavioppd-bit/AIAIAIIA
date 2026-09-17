@@ -156,12 +156,16 @@ def _deduplicate(candidates: list[Recommendation], max_charts: int) -> list[Reco
         )
         if signature in seen_signatures:
             continue
-        # A different chart type over the exact same column pair is redundant.
+        # A different chart type over the exact same column pair is redundant —
+        # except a map, which adds a dimension no other form carries: position
+        # in real space. Ranking states in a bar and placing them on the map are
+        # complementary readings of the same two columns, not duplicate ones.
         pair_signature = (enc.get("x"), enc.get("y"), enc.get("series"), enc.get("agg"))
-        if any(
+        if cand.chart_type != MAP and any(
             (s.encoding.get("x"), s.encoding.get("y"), s.encoding.get("series"), s.encoding.get("agg"))
             == pair_signature
             for s in selected
+            if s.chart_type != MAP
         ):
             continue
         # Cap repetition of any single chart type.

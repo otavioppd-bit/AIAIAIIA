@@ -173,6 +173,37 @@ _BR_STATES = {
     "sp", "se", "to",
 }
 
+_BR_STATE_NAMES = {
+    "acre", "alagoas", "amapa", "amazonas", "bahia", "ceara", "distrito federal",
+    "espirito santo", "goias", "maranhao", "mato grosso", "mato grosso do sul",
+    "minas gerais", "para", "paraiba", "parana", "pernambuco", "piaui",
+    "rio de janeiro", "rio grande do norte", "rio grande do sul", "rondonia",
+    "roraima", "santa catarina", "sao paulo", "sergipe", "tocantins",
+}
+
+# Enough of the world for a column of countries to be recognised by its values
+# rather than only by its header. The frontend map carries the full name table;
+# this set exists purely so "mercado" or "origem" can still be spotted as
+# geographic when nobody named the column "pais".
+_COUNTRY_NAMES = {
+    "brasil", "brazil", "argentina", "chile", "uruguai", "uruguay", "paraguai",
+    "paraguay", "bolivia", "peru", "colombia", "venezuela", "equador", "ecuador",
+    "mexico", "estados unidos", "united states", "eua", "usa", "canada",
+    "portugal", "espanha", "spain", "franca", "france", "alemanha", "germany",
+    "italia", "italy", "reino unido", "united kingdom", "inglaterra", "irlanda",
+    "ireland", "holanda", "paises baixos", "netherlands", "belgica", "belgium",
+    "suica", "switzerland", "austria", "suecia", "sweden", "noruega", "norway",
+    "dinamarca", "denmark", "finlandia", "finland", "polonia", "poland",
+    "russia", "ucrania", "ukraine", "grecia", "greece", "turquia", "turkey",
+    "china", "japao", "japan", "coreia do sul", "south korea", "india",
+    "indonesia", "tailandia", "thailand", "vietna", "vietnam", "filipinas",
+    "philippines", "malasia", "malaysia", "singapura", "singapore", "australia",
+    "nova zelandia", "new zealand", "africa do sul", "south africa", "nigeria",
+    "egito", "egypt", "marrocos", "morocco", "angola", "mocambique",
+    "mozambique", "israel", "emirados arabes unidos", "arabia saudita",
+    "saudi arabia", "catar", "qatar",
+}
+
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.I)
 _URL_RE = re.compile(r"^https?://", re.I)
 _CURRENCY_SYMBOL_RE = re.compile(r"[R$€£¥₹]|BRL|USD|EUR", re.I)
@@ -527,11 +558,28 @@ def _looks_like_date(sample: pd.Series) -> bool:
     return bool(sample.str.match(pattern, na=False).mean() > 0.7)
 
 
+def _place_forms(sample: pd.Series) -> pd.Series:
+    """Accent-free, lowercase, single-spaced — how the place lexicons are keyed."""
+    return (
+        sample.astype("string")
+        .str.normalize("NFKD")
+        .str.encode("ascii", "ignore")
+        .str.decode("ascii")
+        .str.lower()
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+
+
 def _looks_geographic(sample: pd.Series) -> bool:
-    lowered = sample.astype("string").str.strip().str.lower()
-    if lowered.empty:
+    forms = _place_forms(sample)
+    if forms.empty:
         return False
-    return bool(lowered.isin(_BR_STATES).mean() > 0.7)
+    return bool(
+        forms.isin(_BR_STATES).mean() > 0.7
+        or forms.isin(_BR_STATE_NAMES).mean() > 0.7
+        or forms.isin(_COUNTRY_NAMES).mean() > 0.7
+    )
 
 
 def _geo_kind(name: str, sample: pd.Series) -> str:
@@ -542,11 +590,19 @@ def _geo_kind(name: str, sample: pd.Series) -> str:
         return "state"
     if any(w in slug for w in ("cidade", "city", "municipio")):
         return "city"
+
+    # "região" and "território" name a granularity the data may not actually
+    # use — a column of state names is a state column whatever its header says,
+    # so recognisable values outrank those two labels.
+    forms = _place_forms(sample)
+    if not forms.empty:
+        if forms.isin(_BR_STATES).mean() > 0.7 or forms.isin(_BR_STATE_NAMES).mean() > 0.7:
+            return "state"
+        if forms.isin(_COUNTRY_NAMES).mean() > 0.7:
+            return "country"
+
     if any(w in slug for w in ("regiao", "region", "territorio", "territory")):
         return "region"
-    lowered = sample.astype("string").str.strip().str.lower()
-    if not lowered.empty and lowered.isin(_BR_STATES).mean() > 0.7:
-        return "state"
     return "place"
 
 

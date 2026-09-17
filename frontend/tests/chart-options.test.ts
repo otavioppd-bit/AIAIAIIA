@@ -367,3 +367,105 @@ test('barra horizontal com muitas categorias aplica zoom no eixo Y, onde as cate
   assert.equal(option.dataZoom?.[0]?.yAxisIndex, 0, 'zoom deveria indexar o eixo Y na horizontal');
   assert.equal(option.dataZoom?.[0]?.xAxisIndex, undefined, 'não deveria indexar o eixo X na horizontal');
 });
+
+// --- Choropleth map --------------------------------------------------------
+
+type MapOption = {
+  series?: { type?: string; map?: string; data?: { name: string; value: number }[] }[];
+  visualMap?: { min?: number; max?: number };
+  graphic?: { style?: { text?: string } }[];
+};
+
+/** The real assets ship the same shape: normalised spelling -> region name. */
+const BR_ALIASES = {
+  sp: 'São Paulo',
+  saopaulo: 'São Paulo',
+  rj: 'Rio de Janeiro',
+  mg: 'Minas Gerais',
+  minasgerais: 'Minas Gerais',
+};
+
+function mapOption(rows: Record<string, string | number>[], extra: Record<string, unknown> = {}) {
+  return buildChartOption({
+    mode: 'dark',
+    chartType: 'map',
+    data: data(rows, ['uf', 'receita']),
+    encoding: { x: 'uf', y: 'receita', agg: 'sum' },
+    geo: { scope: 'brazil', aliases: BR_ALIASES },
+    ...extra,
+  }) as MapOption;
+}
+
+test('mapa resolve siglas e nomes para a mesma região do GeoJSON', () => {
+  const option = mapOption([
+    { uf: 'SP', receita: 100 },
+    { uf: 'rj', receita: 50 },
+    { uf: 'Minas Gerais', receita: 70 },
+  ]);
+
+  assert.equal(option.series?.[0]?.type, 'map');
+  assert.equal(option.series?.[0]?.map, 'brazil');
+  const byName = Object.fromEntries((option.series?.[0]?.data ?? []).map((d) => [d.name, d.value]));
+  assert.deepEqual(byName, { 'São Paulo': 100, 'Rio de Janeiro': 50, 'Minas Gerais': 70 });
+});
+
+test('mapa soma grafias diferentes que caem na mesma região', () => {
+  const option = mapOption([
+    { uf: 'SP', receita: 100 },
+    { uf: 'são paulo', receita: 40 },
+  ]);
+  const points = option.series?.[0]?.data ?? [];
+  assert.equal(points.length, 1, 'as duas grafias são uma região só');
+  assert.equal(points[0].value, 140, 'um total soma; não sobrescreve');
+});
+
+test('mapa tira a média, e não a soma, quando a métrica é uma média', () => {
+  const option = buildChartOption({
+    mode: 'dark',
+    chartType: 'map',
+    data: data([{ uf: 'SP', receita: 100 }, { uf: 'saopaulo', receita: 200 }], ['uf', 'receita']),
+    encoding: { x: 'uf', y: 'receita', agg: 'mean' },
+    geo: { scope: 'brazil', aliases: BR_ALIASES },
+  }) as MapOption;
+  assert.equal(option.series?.[0]?.data?.[0]?.value, 150, 'somar médias inventaria um número');
+});
+
+test('mapa avisa quantas linhas ficaram fora da geometria', () => {
+  const option = mapOption([
+    { uf: 'SP', receita: 100 },
+    { uf: 'Narnia', receita: 10 },
+    { uf: 'Atlântida', receita: 5 },
+  ]);
+  assert.match(String(option.graphic?.[0]?.style?.text), /2 fora do mapa/);
+});
+
+test('sem geometria carregada o mapa cai na barra em vez de ficar vazio', () => {
+  const option = buildChartOption({
+    mode: 'dark',
+    chartType: 'map',
+    data: data([{ uf: 'SP', receita: 100 }], ['uf', 'receita']),
+    encoding: { x: 'uf', y: 'receita', agg: 'sum' },
+  }) as MapOption;
+  assert.equal(option.series?.[0]?.type, 'bar', 'sem aliases não há mapa possível');
+});
+
+test('nenhuma região reconhecida também cai na barra', () => {
+  const option = mapOption([
+    { uf: 'Narnia', receita: 10 },
+    { uf: 'Atlântida', receita: 5 },
+  ]);
+  assert.equal(option.series?.[0]?.type, 'bar', 'um mapa sem dado nenhum não é um mapa');
+});
+
+test('tooltip do mapa escapa o nome da região vindo do arquivo', () => {
+  const option = buildChartOption({
+    mode: 'dark',
+    chartType: 'map',
+    data: data([{ uf: HOSTILE, receita: 100 }], ['uf', 'receita']),
+    encoding: { x: 'uf', y: 'receita', agg: 'sum' },
+    geo: { scope: 'brazil', aliases: { ...BR_ALIASES, imgsrcxonerroralert1: HOSTILE } },
+  });
+  const html = runFormatter(option, { name: HOSTILE, value: 100 });
+  assert.ok(!html.includes('<img'), `injetou markup cru: ${html}`);
+  assert.ok(html.includes('&lt;img'), 'não escapou o nome da região');
+});

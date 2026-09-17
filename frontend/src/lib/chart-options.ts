@@ -20,6 +20,7 @@ import {
   accentColor,
 } from '@/lib/palette';
 import { compactNumber, formatValue, humanize, type ValueFormat } from '@/lib/format';
+import { normalizeRegionKey, type GeoScope } from '@/lib/geo-names';
 
 export type ThemeMode = 'light' | 'dark';
 
@@ -43,6 +44,8 @@ export interface BuildContext {
   valueFormat?: ValueFormat;
   compact?: boolean;
   options?: Record<string, unknown>;
+  /** Registered geometry + name aliases, present once a map's asset loaded. */
+  geo?: { scope: GeoScope; aliases: Record<string, string> };
 }
 
 const AXIS_FONT = 11;
@@ -154,7 +157,7 @@ function buildChartOptionInner(ctx: BuildContext): EChartsOption {
     case 'funnel':
       return buildFunnel(ctx);
     case 'map':
-      return buildBar(ctx, 'horizontal', false);
+      return buildMap(ctx);
     default:
       return buildBar(ctx, 'vertical', false);
   }
@@ -941,6 +944,138 @@ function buildHeatmap(ctx: BuildContext): EChartsOption {
       },
     ],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Choropleth map
+// ---------------------------------------------------------------------------
+
+/**
+ * Principle: a value that belongs to a place is read fastest in that place.
+ *
+ * The geometry and the alias table arrive together from `useGeoMap`; until they
+ * do, or when not one value resolves to a region, this falls back to the
+ * ranking bar rather than drawing an empty continent.
+ */
+function buildMap(ctx: BuildContext): EChartsOption {
+  const { mode, data, encoding, geo, valueFormat = 'decimal' } = ctx;
+  const palette = PALETTES[mode];
+  const regionKey = encoding.x ?? data.columns[0];
+  const measure = measureColumns(ctx)[0];
+
+  if (!geo) return buildBar(ctx, 'horizontal', false);
+
+  // Two spellings can land on one region ("SP" and "São Paulo"). Collapsing
+  // them has to respect the aggregation: totals add up, averages do not.
+  const additive = !encoding.agg || encoding.agg === 'sum' || encoding.agg === 'count';
+  const accumulated = new Map<string, { total: number; count: number }>();
+  let unmatched = 0;
+
+  for (const row of data.rows) {
+    const label = String(row[regionKey] ?? '').trim();
+    if (!label) continue;
+    const region = geo.aliases[normalizeRegionKey(label)];
+    if (!region) {
+      unmatched += 1;
+      continue;
+    }
+    const value = toNumber(row[measure]);
+    if (value === null) continue;
+    const entry = accumulated.get(region) ?? { total: 0, count: 0 };
+    entry.total += value;
+    entry.count += 1;
+    accumulated.set(region, entry);
+  }
+
+  if (accumulated.size === 0) return buildBar(ctx, 'horizontal', false);
+
+  const points = [...accumulated.entries()].map(([name, { total, count }]) => ({
+    name,
+    value: additive ? total : total / count,
+  }));
+
+  const values = points.map((p) => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  // A single region, or a flat measure, would collapse the ramp to one step.
+  const spread = max - min || Math.abs(max) || 1;
+  const diverging = min < 0 && max > 0;
+
+  return {
+    animationDuration: 520,
+    tooltip: {
+      ...tooltipBase(mode),
+      trigger: 'item',
+      formatter: fmt<{ name: string; value: number | undefined }>((params) => {
+        const value =
+          params.value === undefined || Number.isNaN(params.value)
+            ? 'sem dados'
+            : formatValue(params.value, valueFormat);
+        return (
+          `<div style="font-weight:600;margin-bottom:2px">${escapeHtml(params.name)}</div>` +
+          `${value}`
+        );
+      }),
+    },
+    visualMap: {
+      type: 'continuous',
+      min: diverging ? -Math.max(Math.abs(min), Math.abs(max)) : min,
+      max: diverging ? Math.max(Math.abs(min), Math.abs(max)) : min + spread,
+      calculable: true,
+      orient: 'horizontal',
+      left: 'center',
+      bottom: 0,
+      itemWidth: 12,
+      itemHeight: 90,
+      textStyle: { ...baseTextStyle(mode), color: palette.textMuted },
+      formatter: (value: number) => compactNumber(value),
+      inRange: { color: diverging ? divergingRamp(mode) : PALETTES[mode].sequential },
+    },
+    series: [
+      {
+        type: 'map',
+        map: geo.scope,
+        // Scroll to zoom, drag to pan — the whole point of a map is looking
+        // closer at one region.
+        roam: true,
+        scaleLimit: { min: 1, max: 8 },
+        // Leaves room for the visual map's legend at the bottom of the card.
+        top: 6,
+        bottom: 26,
+        data: points,
+        itemStyle: {
+          areaColor: palette.grid,
+          borderColor: palette.surface,
+          borderWidth: 0.6,
+        },
+        emphasis: {
+          label: { show: false },
+          itemStyle: { borderColor: palette.textPrimary, borderWidth: 1 },
+        },
+        select: { disabled: true },
+      },
+    ],
+    // Surfaced rather than silently dropped: a reader has to know the map is
+    // not showing everything the table has. Sits top-left, the one corner the
+    // toolbox and the visual map both leave empty.
+    graphic:
+      unmatched > 0
+        ? [
+            {
+              type: 'text',
+              left: 4,
+              top: 2,
+              silent: true,
+              style: {
+                text: `${unmatched} fora do mapa`,
+                fill: palette.textMuted,
+                fontSize: 10,
+                fontFamily: 'var(--font-sans), Inter, system-ui, sans-serif',
+              },
+            },
+          ]
+        : undefined,
+  } as EChartsOption;
 }
 
 // ---------------------------------------------------------------------------

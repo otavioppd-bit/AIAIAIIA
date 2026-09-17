@@ -29,6 +29,15 @@ const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: 'table', label: 'Tabela' },
 ];
 
+/** Offered only when a column holds places a map can actually plot. */
+const MAP_OPTION = { value: 'map' as ChartType, label: 'Mapa' };
+
+function hasMappableColumn(columnProfiles: ColumnProfile[]): boolean {
+  return columnProfiles.some((column) =>
+    ['state', 'country'].includes(String(column.detail?.geo_kind ?? '')),
+  );
+}
+
 const AGG_OPTIONS = (Object.keys(AGGREGATION_LABELS) as Aggregation[]).map((value) => ({
   value,
   label: AGGREGATION_LABELS[value],
@@ -51,6 +60,14 @@ export function WidgetEditor({ columnProfiles }: { columnProfiles: ColumnProfile
   const widget = useMemo(
     () => spec?.widgets.find((item) => item.id === selectedId) ?? null,
     [spec, selectedId],
+  );
+
+  const chartTypeOptions = useMemo(
+    () =>
+      hasMappableColumn(columnProfiles)
+        ? [...CHART_TYPE_OPTIONS, MAP_OPTION]
+        : CHART_TYPE_OPTIONS,
+    [columnProfiles],
   );
 
   if (!widget) {
@@ -117,7 +134,7 @@ export function WidgetEditor({ columnProfiles }: { columnProfiles: ColumnProfile
                 <Select
                   label="Tipo de gráfico"
                   value={widget.config.chart_type}
-                  options={CHART_TYPE_OPTIONS}
+                  options={chartTypeOptions}
                   onChange={(event) =>
                     updateWidgetConfig(widget.id, { chart_type: event.target.value as ChartType })
                   }
