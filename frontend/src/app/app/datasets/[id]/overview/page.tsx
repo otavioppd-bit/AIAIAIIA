@@ -58,24 +58,15 @@ export default function OverviewPage() {
 
   // The engine already ranked these; the hero simply refuses to bury the top one.
   const insights = dataset?.analysis?.insights ?? [];
-  const headlineWidget = useMemo(
-    () =>
-      spec?.widgets.find((w) => w.type === 'kpi' && w.config?.kpi?.delta) ??
-      spec?.widgets.find((w) => w.type === 'kpi'),
-    [spec],
-  );
-  const headlineKpi = headlineWidget?.config?.kpi;
-
   /*
-   * The hero already states the headline number at full size, so the grid drops
-   * that one card — the same figure twice on one screen reads as a layout that
-   * was generated rather than composed. In edit mode the widget comes back, or
-   * it would be impossible to move or delete.
+   * The builder keeps this figure out of the widget list precisely so the hero
+   * can state it once at full size — filtering it here instead would leave the
+   * row it came from short, because the grid packs by row.
    */
-  const gridSpec = useMemo(() => {
-    if (!spec || editMode || !headlineWidget) return spec;
-    return { ...spec, widgets: spec.widgets.filter((w) => w.id !== headlineWidget.id) };
-  }, [spec, editMode, headlineWidget]);
+  const headlineKpi =
+    spec?.headline_kpi ??
+    spec?.widgets.find((w) => w.type === 'kpi' && w.config?.kpi?.delta)?.config?.kpi ??
+    spec?.widgets.find((w) => w.type === 'kpi')?.config?.kpi;
 
   if (isLoading || !dataset) {
     return (
@@ -104,7 +95,7 @@ export default function OverviewPage() {
 
   const gridContent = (
     <DashboardGrid
-      spec={gridSpec ?? spec}
+      spec={spec}
       datasetId={dataset.id}
       filters={filters}
       columnProfiles={columnProfiles}

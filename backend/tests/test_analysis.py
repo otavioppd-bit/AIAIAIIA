@@ -524,3 +524,110 @@ def test_a_broken_progress_reporter_never_fails_the_analysis():
 
     bundle = analyse_csv_bytes(_csv(frame), on_stage=explode)
     assert bundle.profile["overview"]["row_count"] == 3
+
+
+def _spec_for(frame: pd.DataFrame) -> dict:
+    from app.services import dashboard_builder
+
+    bundle = analyse_csv_bytes(_csv(frame))
+    return dashboard_builder.build_dashboard_spec(
+        profile=bundle.profile,
+        analysis=bundle.analysis,
+        recommendations=bundle.analysis["recommendations"],
+        kpis=bundle.analysis["kpis"],
+        narrative={"summary": "x"},
+    )
+
+
+def test_no_dashboard_row_is_left_ragged():
+    """A row that ends short leaves dead space, and a row with mismatched
+    heights leaves a hole under the shorter card. Neither reads as a layout
+    someone composed."""
+    rng = np.random.default_rng(7)
+    n = 500
+    frame = pd.DataFrame(
+        {
+            "data_venda": pd.to_datetime(rng.choice(pd.date_range("2024-01-01", "2024-12-31"), n)),
+            "uf": rng.choice(["SP", "RJ", "MG", "BA", "RS"], n),
+            "vendedor": rng.choice(["Ana", "Bruno", "Carla"], n),
+            "categoria": rng.choice(["A", "B", "C"], n),
+            "valor_total": rng.gamma(2, 500, n).round(2),
+        }
+    )
+    spec = _spec_for(frame)
+
+    rows: dict[int, list[dict]] = {}
+    for widget in spec["widgets"]:
+        rows.setdefault(widget["layout"]["y"], []).append(widget)
+
+    for y, row in rows.items():
+        heights = {w["layout"]["h"] for w in row}
+        assert len(heights) == 1, f"linha y={y} tem alturas diferentes: {heights}"
+
+        row.sort(key=lambda w: w["layout"]["x"])
+        # Widgets sit side by side with no overlap and no gap between them.
+        for left, right in zip(row, row[1:], strict=False):
+            assert left["layout"]["x"] + left["layout"]["w"] == right["layout"]["x"], (
+                f"buraco ou sobreposição na linha y={y}"
+            )
+
+        span = row[-1]["layout"]["x"] + row[-1]["layout"]["w"] - row[0]["layout"]["x"]
+        if span < 12:
+            # Only a capped form may leave space, and then it is centred.
+            left_margin = row[0]["layout"]["x"]
+            right_margin = 12 - (row[-1]["layout"]["x"] + row[-1]["layout"]["w"])
+            assert abs(left_margin - right_margin) <= 1, f"linha y={y} não está centrada"
+
+
+def test_a_donut_is_never_inflated_to_close_a_gap():
+    """Past a point the circle stops growing and the card just gets emptier,
+    so filling a row is not worth stretching one."""
+    rng = np.random.default_rng(3)
+    n = 400
+    frame = pd.DataFrame(
+        {
+            "canal": rng.choice(["Direto", "Online", "Parceiro"], n),
+            "receita": rng.gamma(2, 400, n).round(2),
+        }
+    )
+    spec = _spec_for(frame)
+    for widget in spec["widgets"]:
+        if (widget.get("config") or {}).get("chart_type") in {"donut", "pie"}:
+            assert widget["layout"]["w"] <= 6, "donut esticado além do que é legível"
+
+
+def test_a_postal_code_is_never_summed_into_a_total():
+    """Digits that name a place are not a quantity: the old engine read
+    "customer" as the Portuguese "custo" and reported billions of reais worth
+    of ZIP codes as the headline figure."""
+    rng = np.random.default_rng(11)
+    n = 400
+    frame = pd.DataFrame(
+        {
+            "customer_id": [f"{i:08x}" for i in range(n)],
+            "customer_zip_code_prefix": rng.integers(1000, 99990, n),
+            "customer_state": rng.choice(["SP", "RJ", "MG"], n),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    zip_column = next(
+        c for c in bundle.profile["columns"] if c["name"] == "customer_zip_code_prefix"
+    )
+    assert zip_column["semantic_type"] != sem.CURRENCY
+    assert zip_column["role"] != sem.METRIC
+
+    labels = " ".join(k["label"].lower() for k in bundle.analysis["kpis"])
+    assert "zip" not in labels, bundle.analysis["kpis"]
+    assert all(k["format"] != "currency" for k in bundle.analysis["kpis"])
+
+
+def test_an_english_column_name_is_not_read_as_portuguese_money():
+    """"custo" lives inside "customer"; matching by substring made every
+    customer column in an English dataset a currency measure."""
+    assert not sem._matches("customer_state", sem._MONEY_WORDS)
+    assert not sem._matches("CustomerID", sem._MONEY_WORDS)
+    # The words that should match still do, including one plural step.
+    assert sem._matches("custo_medio", sem._MONEY_WORDS)
+    assert sem._matches("custos", sem._MONEY_WORDS)
+    assert sem._matches("valorTotal", sem._MONEY_WORDS)
+    assert sem._matches("precoUnitario", sem._MONEY_WORDS)

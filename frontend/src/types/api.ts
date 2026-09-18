@@ -372,7 +372,9 @@ export interface Widget {
     options?: Record<string, unknown>;
     style: WidgetStyle;
     kpi?: Kpi & { icon?: string };
-    narrative?: {
+    /** The figure the page states above the grid, kept out of the widget list. */
+  headline_kpi?: Kpi | null;
+  narrative?: {
       summary: string;
       sections: { heading: string; body: string }[];
       watch_items: string[];
@@ -408,6 +410,8 @@ export interface DashboardSpec {
   grid: { columns: number; rowHeight: number; gap: number };
   filters: DashboardFilter[];
   widgets: Widget[];
+  /** The figure the page states above the grid, kept out of the widget list. */
+  headline_kpi?: Kpi | null;
   narrative?: {
     headline: string;
     summary: string;

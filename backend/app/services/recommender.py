@@ -450,18 +450,22 @@ def _composition_rules(
         elif 7 <= distinct <= 40 and breakdown.get("pareto_share", 0) >= 0.6:
             out.append(
                 Recommendation(
-                    chart_type=TREEMAP,
-                    title=f"Participação de {sem.humanize(metric).lower() if metric else 'registros'} por {sem.humanize(dim).lower()}",
-                    subtitle=f"{distinct} categorias · área proporcional ao valor",
-                    encoding={"x": dim, "y": metric, "agg": breakdown.get("agg", "sum"), "limit": 30},
-                    rationale=(
-                        f"Com {distinct} categorias um gráfico de pizza seria ilegível. "
-                        "O treemap codifica o valor pela área, acomodando muitas partes e "
-                        "evidenciando a concentração — "
-                        f"os 20% maiores somam {breakdown['pareto_share']:.0%} do total."
+                    chart_type=DONUT,
+                    title=(
+                        f"Concentração de {sem.humanize(metric).lower() if metric else 'registros'} "
+                        f"por {sem.humanize(dim).lower()}"
                     ),
-                    principle="Composição com muitas partes → treemap",
-                    score=0.66 + min(0.1, breakdown["pareto_share"] / 8),
+                    subtitle=f"6 maiores de {distinct} · restante somado em “Outros”",
+                    encoding={"x": dim, "y": metric, "agg": breakdown.get("agg", "sum"), "limit": 6},
+                    rationale=(
+                        f"“{dim}” tem {distinct} categorias — partes demais para que "
+                        "cada fatia seja legível. As seis maiores ficam separadas e o "
+                        "restante é somado em “Outros”, que é o recorte que responde à "
+                        "pergunta real: o quanto está concentrado no topo. Aqui os 20% "
+                        f"maiores somam {breakdown['pareto_share']:.0%} do total."
+                    ),
+                    principle="Composição com muitas partes → maiores + “Outros”",
+                    score=0.62 + min(0.1, breakdown["pareto_share"] / 8),
                     columns=[dim] + ([metric] if metric else []),
                 )
             )

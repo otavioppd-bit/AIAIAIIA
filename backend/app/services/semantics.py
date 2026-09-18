@@ -78,6 +78,11 @@ _QUANTITY_WORDS = {
     "leads", "propostas", "proposals", "oportunidades", "opportunities",
 }
 
+# Postal codes are digits that are not a quantity. Whatever their dtype, a CEP
+# has no total, no average and no distribution worth plotting — it identifies a
+# place, so it belongs with the dimensions.
+_POSTAL_WORDS = {"cep", "zip", "zipcode", "postal", "postcode", "codigo_postal"}
+
 # Measures that must never be summed: rates, unit prices, scores, ratios and
 # point-in-time readings. Summing them produces a number with no meaning.
 _NON_ADDITIVE_WORDS = {
@@ -229,18 +234,36 @@ def humanize(name: str) -> str:
 
 
 def _tokens(name: str) -> set[str]:
-    slug = slugify(name)
+    """Split a column name into the words a lexicon can be matched against.
+
+    camelCase and digit runs are separated first, so `valorTotal` yields
+    {valor, total} the same way `valor_total` does. Getting this right is what
+    lets matching be exact instead of falling back to substrings.
+    """
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", str(name))
+    spaced = re.sub(r"(?<=[A-Za-z])(?=\d)|(?<=\d)(?=[A-Za-z])", "_", spaced)
+    slug = slugify(spaced)
     parts = {p for p in slug.split("_") if p}
     parts.add(slug)
     return parts
 
 
 def _matches(name: str, lexicon: set[str]) -> bool:
+    """Whether a column name carries one of a lexicon's words.
+
+    Matching is by whole word, never by substring. A substring rule reads
+    "custo" inside "customer" and files every customer column in an English
+    dataset as money — which this product then happily sums into a currency
+    total. One plural step is allowed, so "custos" still matches "custo".
+    """
     toks = _tokens(name)
     if toks & lexicon:
         return True
-    slug = slugify(name)
-    return any(word in slug for word in lexicon if len(word) > 3)
+    return any(
+        token[:-1] in lexicon
+        for token in toks
+        if token.endswith("s") and len(token) > 3
+    )
 
 
 @dataclass
@@ -471,7 +494,13 @@ def infer_column(name: str, series: pd.Series, row_count: int) -> tuple[ColumnSe
                         and (name_is_id or not (name_is_qty or name_is_money or name_is_pct))
                     )
                     names_a_measure = name_is_qty or name_is_money or name_is_pct
-                    if looks_like_key and sem_type in {INTEGER}:
+                    if _matches(name, _POSTAL_WORDS):
+                        # A postal code is digits, not a quantity. Summing it
+                        # yields a currency-shaped number that means nothing,
+                        # and averaging it is no better — it names a place.
+                        sem_type, role = GEO, DIMENSION
+                        detail["geo_kind"] = "postal_code"
+                    elif looks_like_key and sem_type in {INTEGER}:
                         sem_type, role = IDENTIFIER, IDENTITY
                     elif (
                         is_int

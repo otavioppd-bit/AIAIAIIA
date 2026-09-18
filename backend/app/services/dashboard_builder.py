@@ -56,7 +56,11 @@ def build_dashboard_spec(
     widgets: list[dict[str, Any]] = []
     cursor = _LayoutCursor()
 
-    for index, kpi in enumerate(kpis):
+    # The page states one figure at full size above the grid. Leaving a second
+    # copy of it in the grid says the same thing twice and — because the grid
+    # packs by row — leaves the row it came from short once the page drops it.
+    headline_kpi = _pick_headline_kpi(kpis)
+    for index, kpi in enumerate(k for k in kpis if k is not headline_kpi):
         widgets.append(_kpi_widget(kpi, index, cursor))
 
     # The narrative and the ranked insights are promoted to the page's hero
@@ -68,6 +72,7 @@ def build_dashboard_spec(
         widgets.append(_chart_widget(rec, index, cursor))
 
     widgets.append(_table_widget(profile, cursor))
+    _justify_layout(widgets)
 
     return {
         "version": SPEC_VERSION,
@@ -77,6 +82,7 @@ def build_dashboard_spec(
         "grid": {"columns": GRID_COLUMNS, "rowHeight": 132, "gap": 16},
         "filters": _default_filters(profile, analysis),
         "widgets": widgets,
+        "headline_kpi": headline_kpi,
         "narrative": narrative or {},
         "meta": {
             "generated": True,
@@ -85,6 +91,94 @@ def build_dashboard_spec(
             "chart_count": len(recommendations),
         },
     }
+
+
+# How wide a form may grow when a row is stretched. A bar or a line gains from
+# every extra column; a donut does not — past a point the circle stops growing
+# and the card just gets emptier around it.
+_MAX_JUSTIFIED_WIDTH: dict[str, int] = {
+    "kpi": 6,
+    "donut": 6,
+    "pie": 6,
+    "radar": 6,
+    "funnel": 6,
+    # Brazil is close to square, so a full-width map is mostly margin.
+    "map": 8,
+}
+
+
+def _widget_width_cap(widget: dict[str, Any]) -> int:
+    if widget["type"] == "kpi":
+        return _MAX_JUSTIFIED_WIDTH["kpi"]
+    chart_type = (widget.get("config") or {}).get("chart_type", "")
+    return _MAX_JUSTIFIED_WIDTH.get(chart_type, GRID_COLUMNS)
+
+
+def _pick_headline_kpi(kpis: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The figure the page leads with: the first that carries a comparison,
+    because a number with a direction says more than a number alone."""
+    if not kpis:
+        return None
+    return next((kpi for kpi in kpis if kpi.get("delta")), kpis[0])
+
+
+def _justify_layout(widgets: list[dict[str, Any]]) -> None:
+    """Re-pack the grid so no row ends ragged.
+
+    Placing widgets left to right at their natural widths reliably ends a row
+    short — a six-column map beside a four-column donut leaves two columns of
+    dead space — and pairs a three-row chart with a two-row one, so the row
+    bottoms out unevenly with a hole under the shorter card. Neither reads as a
+    composition; they read as whatever fell out of the loop.
+
+    Rows are rebuilt in order, then stretched to the full grid and levelled to
+    their tallest member. Spare columns go to the narrowest cards first and
+    never past the point where a form stops getting easier to read, so a donut
+    is not inflated into a banner to close a gap.
+    """
+    if not widgets:
+        return
+
+    rows: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    used = 0
+
+    for widget in widgets:
+        width = max(1, min(int(widget["layout"]["w"]), GRID_COLUMNS))
+        widget["layout"]["w"] = width
+        if current and used + width > GRID_COLUMNS:
+            rows.append(current)
+            current, used = [], 0
+        current.append(widget)
+        used += width
+    if current:
+        rows.append(current)
+
+    y = 0
+    for row in rows:
+        spare = GRID_COLUMNS - sum(w["layout"]["w"] for w in row)
+        order = sorted(row, key=lambda w: w["layout"]["w"])
+        index = 0
+        while spare > 0 and any(w["layout"]["w"] < _widget_width_cap(w) for w in order):
+            widget = order[index % len(order)]
+            index += 1
+            if widget["layout"]["w"] >= _widget_width_cap(widget):
+                continue
+            widget["layout"]["w"] += 1
+            spare -= 1
+
+        # A row that still cannot be filled — one capped card on its own — is
+        # centred rather than left hanging against the left margin.
+        offset = spare // 2 if spare > 0 else 0
+
+        tallest = max(w["layout"]["h"] for w in row)
+        cursor_x = offset
+        for widget in row:
+            widget["layout"]["h"] = tallest
+            widget["layout"]["x"] = cursor_x
+            widget["layout"]["y"] = y
+            cursor_x += widget["layout"]["w"]
+        y += tallest
 
 
 class _LayoutCursor:
