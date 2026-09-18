@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowUp, Bot, CircleSlash, Info, Loader2, Plus, Sparkles, User,
+  ArrowUp, Bot, CircleSlash, Info, Loader2, Plus, User,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EChart } from '@/components/charts/EChart';
@@ -164,15 +164,18 @@ export function ChatPanel({
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         {messages.length === 0 && (
-          <div className="animate-fade-in">
-            <div className="rounded-lg border border-line bg-surface-sunken p-4">
-              <p className="text-[13px] font-medium">Pergunte sobre os seus dados</p>
-              <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+          <div className="animate-fade-in mx-auto max-w-3xl pt-6 sm:pt-10">
+            <div className="text-center">
+              <p className="eyebrow text-primary">Analista de dados</p>
+              <p className="display mt-4 text-[28px] text-ink sm:text-[34px]">
+                Pergunte sobre os seus dados.
+              </p>
+              <p className="mx-auto mt-4 max-w-md text-body-sm leading-relaxed text-ink-muted">
                 Toda resposta é calculada sobre o arquivo que você enviou. Se um número não existir
                 nos dados, a resposta diz isso em vez de estimar.
               </p>
               {deterministic && (
-                <p className="mt-2.5 flex items-start gap-1.5 rounded-md bg-surface p-2 text-2xs leading-relaxed text-ink-subtle">
+                <p className="mx-auto mt-5 flex max-w-lg items-start gap-2 rounded-md border border-dashed border-line-strong/50 p-2.5 text-left text-2xs leading-relaxed text-ink-subtle">
                   <Info className="mt-0.5 h-3 w-3 shrink-0" />
                   Nenhum modelo de linguagem está configurado. As perguntas são interpretadas por
                   regras e respondidas com os números calculados — o recurso segue funcional.
@@ -181,22 +184,31 @@ export function ChatPanel({
             </div>
 
             {suggestions.data && (
-              <div className="mt-3 space-y-1.5">
-                <p className="text-2xs font-semibold uppercase tracking-wide text-ink-subtle">
-                  Sugestões
+              <div className="mt-10">
+                <p className="mono-label mb-3 text-[10px] text-ink-subtle">
+                  Comece por uma destas
                 </p>
-                {suggestions.data.questions.map((question) => (
-                  <button
-                    key={question}
-                    type="button"
-                    onClick={() => ask.mutate(question)}
-                    className="flex w-full items-start gap-2 rounded-md border border-line p-2.5 text-left
-                      text-[13px] text-ink-muted transition-all hover:border-primary/40 hover:bg-primary-soft/40 hover:text-ink"
-                  >
-                    <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-                    {question}
-                  </button>
-                ))}
+                {/* Two columns and numbered, so eight prompts read as a menu
+                    rather than as eight identical rows of the same thing. */}
+                <ul className="grid gap-px overflow-hidden rounded-lg border border-dashed border-line-strong/50 sm:grid-cols-2">
+                  {suggestions.data.questions.map((question, index) => (
+                    <li key={question}>
+                      <button
+                        type="button"
+                        onClick={() => ask.mutate(question)}
+                        className="group flex h-full w-full items-start gap-3 bg-surface/40 p-4 text-left
+                          transition-colors hover:bg-surface"
+                      >
+                        <span className="mono-label mt-px shrink-0 text-[10px] text-ink-subtle transition-colors group-hover:text-primary">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <span className="text-body-sm leading-snug text-ink-muted transition-colors group-hover:text-ink">
+                          {question}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
