@@ -411,6 +411,16 @@
     }
   }
 
+  /*
+   * Explore's canvas is the subject of its page, so it takes the height the
+   * viewport offers instead of a fixed 420px that left a screen's worth of
+   * dead floor beneath it on a desktop display. It still refuses to collapse
+   * below a readable 320px, and stops growing once a chart gains nothing more.
+   */
+  .explore-canvas {
+    height: clamp(320px, calc(100dvh - 21rem), 660px);
+  }
+
   .skeleton {
     @apply relative overflow-hidden bg-surface-sunken;
   }

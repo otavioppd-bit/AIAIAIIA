@@ -40,7 +40,7 @@ page.on('pageerror', (err) => errors.push(`pageerror: ${String(err).slice(0, 200
 try {
   // ── Landing ────────────────────────────────────────────────────────
   await page.goto(BASE, { waitUntil: 'networkidle' });
-  check('Landing carrega', await page.getByRole('heading', { name: /Transforme seus/i }).isVisible());
+  check('Landing carrega', await page.getByRole('heading', { name: /compreendidos/i }).isVisible());
   await page.waitForTimeout(2500); // let the WebGL hero settle
   await page.screenshot({ path: `${SHOTS}/01-landing.png` });
 
@@ -234,7 +234,7 @@ try {
   await page.waitForTimeout(2500);
   await page.getByRole('button', { name: /Alterar tema/i }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('menuitemradio', { name: /Light/i }).click();
+  await page.getByRole('menuitemradio', { name: /Paper/i }).click();
   await page.waitForTimeout(2500);
   const themeAttr = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
   check('Troca de tema aplica', themeAttr === 'light', `data-theme=${themeAttr}`);
@@ -242,13 +242,13 @@ try {
 
   await page.getByRole('button', { name: /Alterar tema/i }).click();
   await page.waitForTimeout(300);
-  await page.getByRole('menuitemradio', { name: /Executive/i }).click();
+  await page.getByRole('menuitemradio', { name: /Alto contraste/i }).click();
   await page.waitForTimeout(2200);
-  await page.screenshot({ path: `${SHOTS}/17-executive-theme.png`, fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/17-contrast-theme.png`, fullPage: true });
 
   await page.getByRole('button', { name: /Alterar tema/i }).click();
   await page.waitForTimeout(300);
-  await page.getByRole('menuitemradio', { name: /Dark/i }).first().click();
+  await page.getByRole('menuitemradio', { name: /Blueprint/i }).first().click();
   await page.waitForTimeout(1800);
 
   // ── Presentation mode ──────────────────────────────────────────────

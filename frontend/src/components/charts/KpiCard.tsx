@@ -34,8 +34,8 @@ export function KpiCard({
   return (
     <div
       className={cn(
-        'flex h-full flex-col justify-between gap-4',
-        compact ? 'p-4' : 'px-5 py-4',
+        'flex h-full flex-col justify-between gap-2.5',
+        compact ? 'p-3.5' : 'px-5 py-3.5',
         className,
       )}
     >
@@ -43,7 +43,7 @@ export function KpiCard({
         <p className="mono-label truncate text-[10px] text-ink-subtle" title={kpi.label}>
           {kpi.label}
         </p>
-        <div className="rule-dashed mt-2 opacity-60" />
+        <div className="rule-dashed mt-1.5 opacity-60" />
       </div>
 
       <div className="min-w-0">
@@ -59,7 +59,7 @@ export function KpiCard({
         </p>
 
         {delta && (
-          <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span
               className={cn(
                 'numeric inline-flex items-center gap-1 text-caption font-semibold',

@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Download, Lightbulb, Plus, Sparkles, X } from 'lucide-react';
+import { ChevronDown, Download, Lightbulb, Plus, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { EChart } from '@/components/charts/EChart';
 import { DataTable } from '@/components/charts/DataTable';
@@ -19,6 +19,7 @@ import { buildChartOption } from '@/lib/chart-options';
 import { exportRowsToCsv } from '@/lib/export';
 import { useDataset } from '@/hooks/useDataset';
 import { useTheme } from '@/hooks/useTheme';
+import { cn } from '@/lib/utils';
 import {
   AGGREGATION_LABELS, TIME_GRAIN_LABELS, humanize,
 } from '@/lib/format';
@@ -143,164 +144,185 @@ export default function ExplorePage() {
 
   return (
     <div className="flex flex-col lg:flex-row">
-      <aside className="shrink-0 border-b border-line bg-surface/40 p-4 lg:w-72 lg:border-b-0 lg:border-r">
-        <h2 className="mb-4 text-base font-semibold tracking-[-0.01em]">Explore</h2>
-
-        <div className="space-y-3.5">
-          <Select
-            label="Eixo X / Dimensão"
-            value={x}
-            placeholder="Selecione"
-            options={effectiveChartType === 'scatter' ? metricOptions : dimensionOptions}
-            onChange={(event) => setX(event.target.value)}
-          />
-
-          <Select
-            label="Eixo Y / Métrica"
-            value={y}
-            placeholder="Contagem de registros"
-            options={metricOptions}
-            onChange={(event) => {
-              setY(event.target.value);
-              const field = fields.data?.columns.find((column) => column.name === event.target.value);
-              // Follow the column's own additivity so the default never sums a
-              // unit price or a rate.
-              if (field?.default_agg) setAgg(field.default_agg);
-            }}
-          />
-
-          <Select
-            label="Série / Segmentação"
-            value={series}
-            placeholder="Nenhuma"
-            options={fieldOptions(fields.data.dimensions)}
-            onChange={(event) => setSeries(event.target.value)}
-          />
-
-          <Select
-            label="Agregação"
-            value={agg}
-            options={fields.data.aggregations.map((value) => ({
-              value,
-              label: AGGREGATION_LABELS[value] ?? value,
-            }))}
-            onChange={(event) => setAgg(event.target.value as Aggregation)}
-          />
-
-          {xIsTemporal && (
-            <Select
-              label="Granularidade"
-              value={grain}
-              options={Object.entries(TIME_GRAIN_LABELS).map(([value, label]) => ({ value, label }))}
-              onChange={(event) => setGrain(event.target.value as TimeGrain)}
-            />
-          )}
-
-          <Select
-            label="Tipo de gráfico"
-            value={effectiveChartType}
-            options={fields.data.chart_types.map((value) => ({
-              value,
-              label: CHART_LABELS[value] ?? value,
-            }))}
-            onChange={(event) => {
-              setAutoChart(false);
-              setChartType(event.target.value as ChartType);
-            }}
-          />
-
-          <Switch
-            label="Sugerir gráfico automaticamente"
-            description="Escolhe o tipo com base nos campos selecionados."
-            checked={autoChart}
-            onChange={setAutoChart}
-          />
-
-          <Input
-            label="Limite de resultados"
-            type="number"
-            min={3}
-            max={500}
-            value={limit}
-            onChange={(event) => setLimit(Math.max(3, Math.min(500, Number(event.target.value) || 20)))}
-          />
-
-          <Switch label="Ordem decrescente" checked={sortDesc} onChange={setSortDesc} />
+      <aside className="shrink-0 border-b border-line bg-surface/40 p-4 lg:w-[19rem] lg:border-b-0 lg:border-r">
+        <div className="mb-4">
+          <p className="eyebrow text-ink-subtle">Consulta</p>
+          <h2 className="mt-1 text-base font-semibold tracking-[-0.01em]">Explore</h2>
         </div>
 
-        <div className="mt-5 border-t border-line pt-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[13px] font-medium text-ink-muted">Filtros</span>
-            <Button size="xs" variant="ghost" icon={<Plus className="h-3 w-3" />} onClick={addFilter}>
-              Adicionar
-            </Button>
-          </div>
+        {/*
+          Nine controls at one visual weight read as a list of nine equally
+          important decisions. They are not: the query is chosen first, its
+          form second, its slice third. The groups say so.
+        */}
+        <div className="space-y-5">
+          <ControlGroup title="Dados">
+            <Select
+              label="Eixo X / Dimensão"
+              value={x}
+              placeholder="Selecione"
+              options={effectiveChartType === 'scatter' ? metricOptions : dimensionOptions}
+              onChange={(event) => setX(event.target.value)}
+            />
 
-          <div className="space-y-2">
-            {filters.map((filter, index) => (
-              <div key={filter.key} className="rounded-md border border-line bg-surface p-2">
-                <div className="mb-1.5 flex items-center justify-between gap-1">
-                  <select
-                    value={filter.column}
-                    onChange={(event) =>
-                      setFilters((current) =>
-                        current.map((item, i) =>
-                          i === index ? { ...item, column: event.target.value } : item,
-                        ),
-                      )
-                    }
-                    className="min-w-0 flex-1 truncate bg-transparent text-xs font-medium outline-none"
-                  >
-                    {fields.data!.columns.map((column) => (
-                      <option key={column.name} value={column.name}>
-                        {humanize(column.name)}
-                      </option>
-                    ))}
-                  </select>
-                  <IconButton
-                    label="Remover filtro"
-                    size="xs"
-                    onClick={() => setFilters((current) => current.filter((_, i) => i !== index))}
-                  >
-                    <X className="h-3 w-3" />
-                  </IconButton>
+            <Select
+              label="Eixo Y / Métrica"
+              value={y}
+              placeholder="Contagem de registros"
+              options={metricOptions}
+              onChange={(event) => {
+                setY(event.target.value);
+                const field = fields.data?.columns.find((column) => column.name === event.target.value);
+                // Follow the column's own additivity so the default never sums a
+                // unit price or a rate.
+                if (field?.default_agg) setAgg(field.default_agg);
+              }}
+            />
+
+            <Select
+              label="Série / Segmentação"
+              value={series}
+              placeholder="Nenhuma"
+              options={fieldOptions(fields.data.dimensions)}
+              onChange={(event) => setSeries(event.target.value)}
+            />
+
+            <Select
+              label="Agregação"
+              value={agg}
+              options={fields.data.aggregations.map((value) => ({
+                value,
+                label: AGGREGATION_LABELS[value] ?? value,
+              }))}
+              onChange={(event) => setAgg(event.target.value as Aggregation)}
+            />
+
+            {xIsTemporal && (
+              <Select
+                label="Granularidade"
+                value={grain}
+                options={Object.entries(TIME_GRAIN_LABELS).map(([value, label]) => ({ value, label }))}
+                onChange={(event) => setGrain(event.target.value as TimeGrain)}
+              />
+            )}
+          </ControlGroup>
+
+          <ControlGroup title="Forma" defaultCollapsed>
+            <Select
+              label="Tipo de gráfico"
+              value={effectiveChartType}
+              options={fields.data.chart_types.map((value) => ({
+                value,
+                label: CHART_LABELS[value] ?? value,
+              }))}
+              onChange={(event) => {
+                setAutoChart(false);
+                setChartType(event.target.value as ChartType);
+              }}
+            />
+
+            <Switch
+              label="Sugerir automaticamente"
+              description="Escolhe o tipo a partir dos campos selecionados."
+              checked={autoChart}
+              onChange={setAutoChart}
+            />
+          </ControlGroup>
+
+          <ControlGroup title="Recorte" defaultCollapsed>
+            <Input
+              label="Limite de resultados"
+              type="number"
+              min={3}
+              max={500}
+              value={limit}
+              onChange={(event) => setLimit(Math.max(3, Math.min(500, Number(event.target.value) || 20)))}
+            />
+
+            <Switch label="Ordem decrescente" checked={sortDesc} onChange={setSortDesc} />
+          </ControlGroup>
+
+          <ControlGroup
+            title="Filtros"
+            action={
+              <Button size="xs" variant="ghost" icon={<Plus className="h-3 w-3" />} onClick={addFilter}>
+                Adicionar
+              </Button>
+            }
+          >
+            {filters.length === 0 ? (
+              <p className="text-xs leading-relaxed text-ink-subtle">
+                Nenhum filtro. A consulta considera todas as linhas.
+              </p>
+            ) : (
+              filters.map((filter, index) => (
+                <div key={filter.key} className="rounded-md border border-line bg-surface p-2">
+                  <div className="mb-1.5 flex items-center justify-between gap-1">
+                    <select
+                      value={filter.column}
+                      aria-label="Coluna do filtro"
+                      onChange={(event) =>
+                        setFilters((current) =>
+                          current.map((item, i) =>
+                            i === index ? { ...item, column: event.target.value } : item,
+                          ),
+                        )
+                      }
+                      className="min-w-0 flex-1 truncate bg-transparent text-xs font-medium outline-none"
+                    >
+                      {fields.data!.columns.map((column) => (
+                        <option key={column.name} value={column.name}>
+                          {humanize(column.name)}
+                        </option>
+                      ))}
+                    </select>
+                    <IconButton
+                      label="Remover filtro"
+                      size="xs"
+                      onClick={() => setFilters((current) => current.filter((_, i) => i !== index))}
+                    >
+                      <X className="h-3 w-3" />
+                    </IconButton>
+                  </div>
+                  <div className="flex gap-1">
+                    <select
+                      value={filter.op}
+                      aria-label="Operador do filtro"
+                      onChange={(event) =>
+                        setFilters((current) =>
+                          current.map((item, i) =>
+                            i === index ? { ...item, op: event.target.value as ExploreFilter['op'] } : item,
+                          ),
+                        )
+                      }
+                      className="w-20 rounded-sm border border-line bg-surface-sunken px-1 text-2xs outline-none"
+                    >
+                      <option value="eq">=</option>
+                      <option value="neq">≠</option>
+                      <option value="gt">&gt;</option>
+                      <option value="gte">≥</option>
+                      <option value="lt">&lt;</option>
+                      <option value="lte">≤</option>
+                      <option value="contains">contém</option>
+                    </select>
+                    <input
+                      value={String(filter.value ?? '')}
+                      aria-label="Valor do filtro"
+                      onChange={(event) =>
+                        setFilters((current) =>
+                          current.map((item, i) =>
+                            i === index ? { ...item, value: event.target.value } : item,
+                          ),
+                        )
+                      }
+                      placeholder="valor"
+                      className="min-w-0 flex-1 rounded-sm border border-line bg-surface-sunken px-1.5 py-1 text-2xs outline-none focus:border-primary"
+                    />
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <select
-                    value={filter.op}
-                    onChange={(event) =>
-                      setFilters((current) =>
-                        current.map((item, i) =>
-                          i === index ? { ...item, op: event.target.value as ExploreFilter['op'] } : item,
-                        ),
-                      )
-                    }
-                    className="w-20 rounded-sm border border-line bg-surface-sunken px-1 text-2xs outline-none"
-                  >
-                    <option value="eq">=</option>
-                    <option value="neq">≠</option>
-                    <option value="gt">&gt;</option>
-                    <option value="gte">≥</option>
-                    <option value="lt">&lt;</option>
-                    <option value="lte">≤</option>
-                    <option value="contains">contém</option>
-                  </select>
-                  <input
-                    value={String(filter.value ?? '')}
-                    onChange={(event) =>
-                      setFilters((current) =>
-                        current.map((item, i) =>
-                          i === index ? { ...item, value: event.target.value } : item,
-                        ),
-                      )
-                    }
-                    placeholder="valor"
-                    className="min-w-0 flex-1 rounded-sm border border-line bg-surface-sunken px-1.5 py-1 text-2xs outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))
+            )}
+          </ControlGroup>
         </div>
       </aside>
 
@@ -310,7 +332,7 @@ export default function ExplorePage() {
             icon={<Sparkles className="h-5 w-5" />}
             title="Monte sua própria visualização"
             description="Escolha uma dimensão e uma métrica à esquerda. O tipo de gráfico é sugerido automaticamente a partir dos campos."
-            className="h-96 rounded-lg border border-dashed border-line"
+            className="explore-canvas rounded-lg border border-dashed border-line"
           />
         ) : result.isError ? (
           <EmptyState
@@ -318,7 +340,7 @@ export default function ExplorePage() {
             description={
               result.error instanceof ApiError ? result.error.message : 'Erro inesperado.'
             }
-            className="h-96 rounded-lg border border-dashed border-line"
+            className="explore-canvas rounded-lg border border-dashed border-line"
           />
         ) : (
           <>
@@ -350,26 +372,28 @@ export default function ExplorePage() {
               </div>
             )}
 
-            <Card className="p-4">
+            <Card className="flex flex-col p-4">
               {result.isFetching && !result.data ? (
-                <ChartSkeleton className="h-[420px]" />
+                <ChartSkeleton className="explore-canvas w-full" />
               ) : !result.data || result.data.rows.length === 0 ? (
                 <EmptyState
                   compact
                   title="Sem resultados"
                   description="Nenhum registro atende à combinação de campos e filtros."
-                  className="h-[420px]"
+                  className="explore-canvas"
                 />
               ) : effectiveChartType === 'table' ? (
-                <DataTable
-                  columns={result.data.columns}
-                  rows={result.data.rows}
-                  columnProfiles={columnProfiles}
-                  maxHeight={420}
-                />
+                <div className="explore-canvas">
+                  <DataTable
+                    columns={result.data.columns}
+                    rows={result.data.rows}
+                    columnProfiles={columnProfiles}
+                    maxHeight="fill"
+                  />
+                </div>
               ) : (
                 option && (
-                  <div className="h-[420px]">
+                  <div className="explore-canvas">
                     <EChart option={option} resetKey={`${effectiveChartType}-${x}-${y}-${series}`} />
                   </div>
                 )
@@ -395,5 +419,67 @@ export default function ExplorePage() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * A titled band of related controls.
+ *
+ * Grouping is the whole point: the sidebar asks for the query first, its form
+ * second and its slice third, and a reader should be able to see that order
+ * without reading every label. On a narrow viewport the sidebar becomes a
+ * banner above the canvas, so the fields lay out in columns rather than one
+ * tall stack that pushes the chart off the screen.
+ */
+function ControlGroup({
+  title,
+  action,
+  defaultCollapsed = false,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  /** Whether the group starts folded away on a narrow viewport. */
+  defaultCollapsed?: boolean;
+  children: React.ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const id = useId();
+
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          aria-expanded={!collapsed}
+          aria-controls={id}
+          onClick={() => setCollapsed((value) => !value)}
+          className="flex min-w-0 items-center gap-1.5 text-left lg:pointer-events-none"
+        >
+          <ChevronDown
+            className={cn(
+              'h-3 w-3 shrink-0 text-ink-subtle transition-transform duration-150 lg:hidden',
+              collapsed && '-rotate-90',
+            )}
+            aria-hidden
+          />
+          <span className="mono-label text-[10px] text-ink-subtle">{title}</span>
+        </button>
+        {action}
+      </div>
+      <div className="rule-dashed mb-3 mt-1.5 opacity-70" />
+      <div
+        id={id}
+        className={cn(
+          'grid gap-3 sm:grid-cols-2 lg:grid-cols-1',
+          // Folded only on the narrow layout, where the sidebar stacks above the
+          // canvas and an unfolded column of nine fields would push the chart a
+          // full screen down. The desktop rail always shows everything.
+          collapsed && 'max-lg:hidden',
+        )}
+      >
+        {children}
+      </div>
+    </section>
   );
 }

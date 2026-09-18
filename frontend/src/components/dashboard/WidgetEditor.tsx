@@ -48,7 +48,18 @@ const GRAIN_OPTIONS = (Object.keys(TIME_GRAIN_LABELS) as TimeGrain[]).map((value
   label: TIME_GRAIN_LABELS[value],
 }));
 
-export function WidgetEditor({ columnProfiles }: { columnProfiles: ColumnProfile[] }) {
+export function WidgetEditor({
+  columnProfiles,
+  fallback,
+}: {
+  columnProfiles: ColumnProfile[];
+  /**
+   * What the panel shows while no widget is selected. A 288px column that says
+   * only "nothing selected" is 288px spent on an apology, so Customize hands
+   * it the dashboard-wide settings instead.
+   */
+  fallback?: React.ReactNode;
+}) {
   const [tab, setTab] = useState('data');
   const spec = useDashboardStore((state) => state.spec);
   const selectedId = useDashboardStore((state) => state.selectedWidgetId);
@@ -72,12 +83,14 @@ export function WidgetEditor({ columnProfiles }: { columnProfiles: ColumnProfile
 
   if (!widget) {
     return (
-      <EmptyState
-        compact
-        icon={<SlidersHorizontal className="h-4 w-4" />}
-        title="Nenhum widget selecionado"
-        description="Clique em um card do dashboard para editar suas propriedades."
-      />
+      fallback ?? (
+        <EmptyState
+          compact
+          icon={<SlidersHorizontal className="h-4 w-4" />}
+          title="Nenhum widget selecionado"
+          description="Clique em um card do dashboard para editar suas propriedades."
+        />
+      )
     );
   }
 

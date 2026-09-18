@@ -124,6 +124,15 @@ Everything flows through `app/services/analyzer.py::analyse_csv_bytes`, which ch
 - **`store/dashboardStore.ts`** — Zustand store with undo/redo for the dashboard editor. `load()` resets the undo stack and saved-baseline, so callers must **guard on dashboard id, not on the spec object** — a React Query refetch hands back a new object every time, and reloading on every render silently discards in-progress edits (see the `loadedDashboardId` ref pattern in `overview/page.tsx` and `customize/page.tsx`).
 - **`hooks/useDataset.ts`** — `GET /dashboards` (list) returns `DashboardSummary` (no `spec` field, by design — specs can be large); the full `Dashboard` with `spec` is fetched separately by id via `usePrimaryDashboard`. Don't conflate the two types.
 - **Three.js (`components/three/`)** is lazy-loaded (`LazyDataOrb` → dynamic `import()`) — never import `DataOrb`/`Scene` eagerly; it added ~220KB to every route that touched it.
+- **The two editing screens are composed, not stacked.** Explore's rail groups
+  its nine controls under `ControlGroup` bands (Dados → Forma → Recorte →
+  Filtros) that fold on narrow viewports and are always open from `lg` up, and
+  the result canvas uses `.explore-canvas` (a viewport-derived clamp) instead of
+  a fixed 420px that left a screen of dead floor beneath it. Customize puts the
+  grid at the top and moves the dashboard's own settings — title, subtitle,
+  theme — into `WidgetEditor`'s new `fallback` slot, which is what the
+  properties panel shows while no widget is selected; its save bar is sticky at
+  the bottom because editing happens far down the page.
 - `lib/export.ts`'s CSV formula-injection guard distinguishes a hostile leading `=`/`+`/`-`/`@` from a legitimate negative number via a numeric-literal regex — don't simplify this to a blanket prefix check on `/^[+-]/`, it was a real bug (exported `-1234.5` as text).
 
 ## Traps this codebase has already fallen into
@@ -146,6 +155,11 @@ Everything flows through `app/services/analyzer.py::analyse_csv_bytes`, which ch
   State is in-memory, TTL'd, and scoped to the user who claimed the token.
 - **Never truncate a figure.** A clipped "R$ 728.5…" is not a number anyone can
   act on; `KpiCard` and `InsightHero` step down the type scale instead.
+- **A KPI card has to fit its cell, not overflow it.** `.widget-cell` is a fixed
+  132px for a one-row card; `KpiCard`'s padding and gaps were 13px taller than
+  that, so every delta line was clipped in both Overview and Customize. Measure
+  `scrollHeight - clientHeight` on the card's inner element after changing its
+  spacing — the clipping is silent, `overflow-hidden` hides it.
 - **The dashboard grid reorganises, it does not shrink.** `.widget-cell` carries
   three spans and CSS picks one per breakpoint (full width < 768, two columns to
   1279, the designed composition above). Holding twelve columns at 375px put a
