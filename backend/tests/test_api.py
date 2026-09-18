@@ -493,3 +493,60 @@ def test_health_does_not_disclose_the_configured_provider(client: TestClient):
     serialised = str(body).lower()
     for leaked in ("anthropic", "openai", "claude", "gpt", "rule-based"):
         assert leaked not in serialised, f"/health expôs “{leaked}”"
+
+
+def test_progress_is_scoped_to_the_user_who_claimed_the_token():
+    """A token is guessable, so reading one must prove ownership — otherwise
+    anyone could watch someone else's upload advance."""
+    from app.services import progress
+
+    progress.start("tok-abc", "user-1")
+    progress.record("tok-abc", "patterns")
+
+    mine = progress.read("tok-abc", "user-1")
+    assert mine is not None
+    assert mine["stage"] == "patterns"
+    assert mine["index"] == progress.STAGE_IDS.index("patterns")
+
+    assert progress.read("tok-abc", "user-2") is None, "vazou para outro usuário"
+
+    progress.finish("tok-abc")
+    assert progress.read("tok-abc", "user-1") is None
+
+
+def test_progress_endpoint_answers_for_an_unknown_token(auth_client):
+    """An upload that has not reached the server yet, or already returned, is
+    not an error state — the client just keeps waiting."""
+    response = auth_client.get("/api/v1/datasets/progress/nao-existe")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["stage"] is None
+    assert body["total"] == 7
+
+
+def test_upload_reports_real_progress_stages(auth_client):
+    """End to end: the token travels with the upload and the pipeline fills it."""
+    from app.services import progress
+
+    csv = b"data,uf,valor_total\n2024-01-05,SP,1200.50\n2024-02-11,RJ,980.00\n" * 40
+    seen: list[str] = []
+    original = progress.record
+
+    def spy(token: str, stage: str) -> None:
+        seen.append(stage)
+        original(token, stage)
+
+    progress.record = spy
+    try:
+        response = auth_client.post(
+            "/api/v1/datasets",
+            files={"file": ("vendas.csv", csv, "text/csv")},
+            data={"progress_token": "tok-upload"},
+        )
+    finally:
+        progress.record = original
+
+    assert response.status_code == 201, response.text
+    assert "read" in seen and "build" in seen, seen
+    # The token is released once the upload has answered.
+    assert progress.read("tok-upload", "irrelevante") is None

@@ -5,7 +5,9 @@ profile → semantics → statistics → domain → insights → recommendations
 """
 from __future__ import annotations
 
+import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,10 +21,29 @@ from app.services import quality as quality_mod
 from app.services import semantics as sem
 from app.services import statistics as stats
 
+logger = logging.getLogger(__name__)
+
 # Guard rails on how much analysis work a single dataset can trigger.
 _MAX_TRENDS = 6
 _MAX_BREAKDOWNS = 8
 _MAX_BREAKDOWN_CARDINALITY = 200
+
+
+StageCallback = Callable[[str], None]
+
+
+def _stage_reporter(on_stage: StageCallback | None) -> StageCallback:
+    """Progress reporting must never be able to fail an analysis."""
+    if on_stage is None:
+        return lambda _stage: None
+
+    def report(stage: str) -> None:
+        try:
+            on_stage(stage)
+        except Exception:  # pragma: no cover - a broken reporter is not fatal
+            logger.debug("Falha ao reportar o estágio %s", stage, exc_info=True)
+
+    return report
 
 
 @dataclass
@@ -42,10 +63,24 @@ class AnalysisBundle:
         return str(self.analysis["domain"]["key"])
 
 
-def analyse_csv_bytes(raw: bytes, *, filename: str = "dataset.csv") -> AnalysisBundle:
-    """Full pipeline entry point for an uploaded file."""
+def analyse_csv_bytes(
+    raw: bytes,
+    *,
+    filename: str = "dataset.csv",
+    on_stage: StageCallback | None = None,
+) -> AnalysisBundle:
+    """Full pipeline entry point for an uploaded file.
+
+    `on_stage` is invoked as each phase begins, so the client can show what the
+    server is really doing instead of animating a plausible sequence.
+    """
     started = time.perf_counter()
+    report = _stage_reporter(on_stage)
+
+    report("read")
     read = ingestion.read_csv_bytes(raw, filename=filename)
+
+    report("schema")
     typed_frame, column_semantics = sem.analyse_schema(read.frame)
 
     bundle = analyse_frame(
@@ -55,6 +90,7 @@ def analyse_csv_bytes(raw: bytes, *, filename: str = "dataset.csv") -> AnalysisB
         encoding=read.encoding,
         delimiter=read.delimiter,
         warnings=list(read.warnings),
+        on_stage=on_stage,
     )
     bundle.analysis["meta"]["duration_ms"] = int((time.perf_counter() - started) * 1000)
     return bundle
@@ -68,9 +104,11 @@ def analyse_frame(
     encoding: str = "utf-8",
     delimiter: str = ",",
     warnings: list[str] | None = None,
+    on_stage: StageCallback | None = None,
 ) -> AnalysisBundle:
     """Run every analytical stage over an already-typed DataFrame."""
     warnings = list(warnings or [])
+    report = _stage_reporter(on_stage)
 
     # Large datasets are profiled on a deterministic sample so the pipeline
     # stays responsive; the full frame is still what queries run against.
@@ -86,6 +124,7 @@ def analyse_frame(
             f"{settings.sample_rows_for_analysis:,} linhas.".replace(",", ".")
         )
 
+    report("schema")
     profile = profiling.profile_dataset(
         analysis_frame,
         column_semantics,
@@ -97,12 +136,14 @@ def analyse_frame(
     profile["overview"]["row_count"] = int(len(frame))
     profile["overview"]["sampled_for_stats"] = sampled
 
+    report("patterns")
     domain_info = domain_mod.detect_domain([c["name"] for c in profile["columns"]])
 
     metric_columns = [c["name"] for c in profile["columns"] if c["role"] == sem.METRIC]
     dimension_columns = [c["name"] for c in profile["columns"] if c["role"] == sem.DIMENSION]
     temporal_columns = [c["name"] for c in profile["columns"] if c["role"] == sem.TEMPORAL]
 
+    report("relations")
     correlations = stats.correlation_matrix(analysis_frame, metric_columns)
     trends, anomalies = _build_trends(analysis_frame, profile, temporal_columns, metric_columns, domain_info)
     breakdowns = _build_breakdowns(analysis_frame, profile, dimension_columns, metric_columns, domain_info)
@@ -126,10 +167,12 @@ def analyse_frame(
         },
     }
 
+    report("insights")
     analysis["quality"] = quality_mod.score_dataset(profile)
     analysis["insights"] = insights_mod.generate_insights(
         analysis_frame, profile, analysis, analysis["quality"], domain_info
     )
+    report("charts")
     analysis["recommendations"] = recommender.recommend(
         analysis_frame, profile, analysis, domain_info
     )

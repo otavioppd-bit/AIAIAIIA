@@ -7,7 +7,8 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, File, Query, Request, UploadFile, status
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, select
 
 from app.ai.analyst import DataAnalyst
@@ -24,7 +25,7 @@ from app.schemas.dataset import (
     RenameDatasetRequest,
     UploadResponse,
 )
-from app.services import analyzer, dashboard_builder, profiling, storage
+from app.services import analyzer, dashboard_builder, profiling, progress, storage
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 logger = logging.getLogger(__name__)
@@ -83,10 +84,14 @@ async def upload_dataset(
     user: CurrentUser,
     db: DbSession,
     file: Annotated[UploadFile, File(description="Arquivo CSV")],
+    progress_token: Annotated[str | None, Form(description="Token de progresso")] = None,
 ) -> UploadResponse:
     """Upload a CSV, run the full analysis pipeline and generate a dashboard."""
     _validate_upload(file)
     raw = await _read_upload(file)
+
+    if progress_token:
+        progress.start(progress_token, user.id)
 
     dataset = Dataset(
         user_id=user.id,
@@ -101,17 +106,30 @@ async def upload_dataset(
     db.refresh(dataset)
 
     try:
-        bundle = analyzer.analyse_csv_bytes(raw, filename=dataset.original_filename)
+        # The pipeline is CPU-bound and synchronous. Awaiting it directly would
+        # pin the event loop for the whole analysis, so a large upload would
+        # freeze every other request — including the progress polls this very
+        # feature depends on.
+        bundle = await run_in_threadpool(
+            analyzer.analyse_csv_bytes,
+            raw,
+            filename=dataset.original_filename,
+            on_stage=(lambda stage: progress.record(progress_token, stage))
+            if progress_token
+            else None,
+        )
     except UnprocessableDatasetError as exc:
         dataset.status = DatasetStatus.FAILED
         dataset.error_message = exc.message
         db.commit()
+        progress.finish(progress_token or "")
         raise
     except Exception as exc:  # pragma: no cover - unexpected parser failure
         logger.exception("Falha inesperada ao analisar o conjunto de dados %s", dataset.id)
         dataset.status = DatasetStatus.FAILED
         dataset.error_message = "Falha inesperada ao processar o arquivo."
         db.commit()
+        progress.finish(progress_token or "")
         raise UnprocessableDatasetError(
             "Não foi possível processar este arquivo. Verifique o formato e tente novamente."
         ) from exc
@@ -131,13 +149,29 @@ async def upload_dataset(
     db.commit()
     db.refresh(dataset)
 
+    if progress_token:
+        progress.record(progress_token, "build")
     dashboard = await _generate_dashboard(db, user_id=user.id, dataset=dataset)
+    if progress_token:
+        progress.finish(progress_token)
 
     return UploadResponse(
         dataset=DatasetDetail.model_validate(dataset),
         dashboard_id=dashboard.id if dashboard else None,
         warnings=bundle.warnings,
     )
+
+
+@router.get("/progress/{token}")
+async def read_progress(token: str, user: CurrentUser) -> dict:
+    """Which pipeline stage an in-flight upload is on.
+
+    Scoped to the user who claimed the token, so a guessed token reveals
+    nothing. An unknown token is not an error: the upload may not have reached
+    the server yet, or may already have returned.
+    """
+    state = progress.read(token, user.id)
+    return state or {"stage": None, "index": None, "total": len(progress.STAGE_IDS)}
 
 
 async def _generate_dashboard(db, *, user_id: str, dataset: Dataset) -> Dashboard | None:

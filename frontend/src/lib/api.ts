@@ -228,8 +228,14 @@ export const api = {
 
     get: (id: string) => request<DatasetDetail>(`/datasets/${id}`),
 
-    upload: (file: File, onProgress?: (percent: number) => void) =>
-      uploadWithProgress(file, onProgress),
+    upload: (file: File, onProgress?: (percent: number) => void, progressToken?: string) =>
+      uploadWithProgress(file, onProgress, progressToken),
+
+    /** Which pipeline stage an in-flight upload is on. */
+    analysisProgress: (token: string) =>
+      request<{ stage: string | null; index: number | null; total: number }>(
+        `/datasets/progress/${encodeURIComponent(token)}`,
+      ),
 
     rename: (id: string, name: string) =>
       request<DatasetSummary>(`/datasets/${id}`, { method: 'PATCH', body: { name } }),
@@ -369,10 +375,14 @@ export const api = {
 function uploadWithProgress(
   file: File,
   onProgress?: (percent: number) => void,
+  progressToken?: string,
 ): Promise<UploadResponse> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append('file', file);
+    // Lets the server report which analysis stage it is on while this request
+    // is still open.
+    if (progressToken) form.append('progress_token', progressToken);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_URL}${API_PREFIX}/datasets`);

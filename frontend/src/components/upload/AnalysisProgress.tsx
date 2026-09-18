@@ -1,19 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Check, Loader2 } from 'lucide-react';
-import { Progress } from '@/components/ui/Controls';
+import { useEffect, useRef, useState } from 'react';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
+/**
+ * The seven phases of the server's pipeline, in the order they run.
+ *
+ * They are not a script: each one is reported by the analyser as it begins, so
+ * what the user watches is what the server did. Insights genuinely run before
+ * chart selection — the list follows the code rather than rearranging itself to
+ * look tidier.
+ */
 export const ANALYSIS_STAGES = [
-  { id: 'read', label: 'Lendo o conjunto de dados', weight: 1 },
-  { id: 'columns', label: 'Entendendo as colunas', weight: 1.4 },
-  { id: 'patterns', label: 'Detectando padrões', weight: 1.6 },
-  { id: 'correlations', label: 'Buscando correlações', weight: 1.4 },
-  { id: 'charts', label: 'Selecionando visualizações', weight: 1.2 },
-  { id: 'insights', label: 'Gerando insights', weight: 1.4 },
-  { id: 'build', label: 'Montando o dashboard', weight: 1 },
+  { id: 'read', label: 'Lendo o arquivo' },
+  { id: 'schema', label: 'Entendendo as colunas' },
+  { id: 'patterns', label: 'Detectando padrões' },
+  { id: 'relations', label: 'Analisando relações' },
+  { id: 'insights', label: 'Gerando insights' },
+  { id: 'charts', label: 'Selecionando visualizações' },
+  { id: 'build', label: 'Montando o dashboard' },
 ] as const;
+
+const POLL_MS = 400;
 
 interface AnalysisProgressProps {
   /** 0–100, the real upload progress reported by the request. */
@@ -22,106 +31,116 @@ interface AnalysisProgressProps {
   processing: boolean;
   /** True when the response has arrived. */
   done: boolean;
-  /** Used to pace the stages: bigger files genuinely take longer. */
-  sizeBytes?: number;
+  /** Identifies this upload to the server's progress endpoint. */
+  token?: string;
 }
 
-/**
- * Upload progress is measured. Server-side analysis is a single request with
- * no streaming, so the stages are paced against a size-derived estimate and —
- * importantly — never reach completion until the response actually lands.
- */
 export function AnalysisProgress({
   uploadPercent,
   processing,
   done,
-  sizeBytes = 0,
+  token,
 }: AnalysisProgressProps) {
-  const [stageIndex, setStageIndex] = useState(0);
+  const [stageIndex, setStageIndex] = useState(-1);
+  const highWater = useRef(-1);
 
   useEffect(() => {
-    if (!processing || done) return undefined;
-
-    const totalWeight = ANALYSIS_STAGES.reduce((sum, stage) => sum + stage.weight, 0);
-    // ~1.1s per MB, floored at 2.4s and capped at 22s for the whole sequence.
-    const estimatedMs = Math.min(Math.max((sizeBytes / 1_000_000) * 1100, 2400), 22000);
+    if (!processing || done || !token) return undefined;
 
     let cancelled = false;
-    let index = 0;
+    let timer: number;
 
-    const advance = () => {
-      if (cancelled || index >= ANALYSIS_STAGES.length - 1) return;
-      const stage = ANALYSIS_STAGES[index];
-      window.setTimeout(() => {
+    const poll = async () => {
+      try {
+        const state = await api.datasets.analysisProgress(token);
         if (cancelled) return;
-        index += 1;
-        setStageIndex(index);
-        advance();
-      }, (stage.weight / totalWeight) * estimatedMs);
+        if (typeof state.index === 'number') {
+          // Never walk backwards: a poll can land on a stale read, and a
+          // sequence that retreats looks broken even when the work is fine.
+          highWater.current = Math.max(highWater.current, state.index);
+          setStageIndex(highWater.current);
+        }
+      } catch {
+        // A dropped poll is not worth surfacing — the upload is unaffected and
+        // the next tick will catch up.
+      }
+      if (!cancelled) timer = window.setTimeout(poll, POLL_MS);
     };
 
-    setStageIndex(0);
-    advance();
+    poll();
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [processing, done, sizeBytes]);
+  }, [processing, done, token]);
 
   useEffect(() => {
-    if (done) setStageIndex(ANALYSIS_STAGES.length);
+    if (done) {
+      highWater.current = ANALYSIS_STAGES.length;
+      setStageIndex(ANALYSIS_STAGES.length);
+    }
   }, [done]);
 
   const uploading = uploadPercent < 100 && !processing;
+  const reached = done ? ANALYSIS_STAGES.length : stageIndex;
 
   return (
-    <div className="w-full max-w-md">
-      <div className="mb-5">
-        <div className="mb-2 flex items-baseline justify-between">
-          <p className="text-[13px] font-medium">
-            {uploading ? 'Enviando arquivo' : done ? 'Análise concluída' : 'Analisando seus dados'}
-          </p>
-          <span className="text-xs tabular-nums text-ink-subtle">
-            {uploading ? `${uploadPercent}%` : done ? '100%' : ''}
-          </span>
-        </div>
-        <Progress
-          value={done ? 100 : uploading ? uploadPercent : 100}
-          tone={done ? 'positive' : 'primary'}
-          className={cn(!uploading && !done && 'animate-pulse')}
-        />
-      </div>
+    <div className="w-full max-w-lg">
+      <p className="eyebrow text-primary">
+        {uploading ? 'Enviando' : done ? 'Concluído' : 'Analisando'}
+      </p>
+      <p className="display mt-3 text-[26px] sm:text-[32px]">
+        {uploading
+          ? 'Enviando seu arquivo'
+          : done
+            ? 'Dashboard pronto'
+            : 'Entendendo seus dados'}
+      </p>
 
-      <ol className="space-y-2.5">
+      {uploading && (
+        <div className="mt-5">
+          <div className="h-px w-full bg-line">
+            <div
+              className="h-px bg-primary transition-[width] duration-200"
+              style={{ width: `${uploadPercent}%` }}
+            />
+          </div>
+          <p className="numeric mono-label mt-2 text-[10px] text-ink-subtle">{uploadPercent}%</p>
+        </div>
+      )}
+
+      <ol className="mt-8 space-y-0">
         {ANALYSIS_STAGES.map((stage, index) => {
-          const complete = index < stageIndex;
-          const active = index === stageIndex && processing && !done;
-          const pending = index > stageIndex;
+          const complete = index < reached;
+          const active = index === reached && !done;
+          const pending = index > reached;
 
           return (
             <li
               key={stage.id}
               className={cn(
-                'flex items-center gap-2.5 text-[13px] transition-all duration-300',
+                'flex items-center gap-4 border-t border-dashed border-line-strong/40 py-2.5',
+                'transition-colors duration-300',
                 complete && 'text-ink-muted',
                 active && 'text-ink',
-                pending && 'text-ink-subtle/50',
+                pending && 'text-ink-subtle/40',
               )}
             >
-              <span
-                className={cn(
-                  'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all duration-300',
-                  complete && 'border-positive bg-positive text-white',
-                  active && 'border-primary',
-                  pending && 'border-line',
-                )}
-              >
-                {complete ? (
-                  <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                ) : active ? (
-                  <Loader2 className="h-2.5 w-2.5 animate-spin text-primary" />
-                ) : null}
+              <span className="mono-label w-5 shrink-0 text-[10px]">
+                {String(index + 1).padStart(2, '0')}
               </span>
-              {stage.label}
+
+              {/* A measured rule rather than a spinner: the row itself fills. */}
+              <span className="relative h-px flex-1 bg-line/60">
+                <span
+                  className={cn(
+                    'absolute inset-y-0 left-0 bg-primary transition-[width] duration-500 ease-smooth',
+                    complete ? 'w-full' : active ? 'w-1/3 animate-pulse' : 'w-0',
+                  )}
+                />
+              </span>
+
+              <span className="w-52 shrink-0 text-right text-body-sm">{stage.label}</span>
             </li>
           );
         })}

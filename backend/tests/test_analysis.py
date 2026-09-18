@@ -488,3 +488,39 @@ def test_grouped_box_plot_answers_what_a_total_hides():
     assert len(result["rows"]) == 3
     for row in result["rows"]:
         assert row["q1"] <= row["median"] <= row["q3"]
+
+
+def test_pipeline_reports_the_stages_it_actually_runs():
+    """The progress a user watches has to be the work the server did, so the
+    callback fires from inside the pipeline rather than on a timer."""
+    rng = np.random.default_rng(1)
+    n = 300
+    frame = pd.DataFrame(
+        {
+            "data": pd.to_datetime(rng.choice(pd.date_range("2024-01-01", "2024-12-31"), n)),
+            "uf": rng.choice(["SP", "RJ", "MG"], n),
+            "valor_total": rng.gamma(2, 400, n).round(2),
+        }
+    )
+    seen: list[str] = []
+    analyse_csv_bytes(_csv(frame), on_stage=seen.append)
+
+    from app.services import progress
+
+    assert seen, "nenhum estágio reportado"
+    assert set(seen) <= set(progress.STAGE_IDS), seen
+    # Reported in execution order, never rearranged to look tidier.
+    positions = [progress.STAGE_IDS.index(stage) for stage in seen]
+    assert positions == sorted(positions), seen
+    assert seen[0] == "read"
+
+
+def test_a_broken_progress_reporter_never_fails_the_analysis():
+    """Progress is a nicety; losing it must not cost the user their upload."""
+    frame = pd.DataFrame({"categoria": ["A", "B", "A"], "valor": [1.0, 2.0, 3.0]})
+
+    def explode(_stage: str) -> None:
+        raise RuntimeError("reporter caiu")
+
+    bundle = analyse_csv_bytes(_csv(frame), on_stage=explode)
+    assert bundle.profile["overview"]["row_count"] == 3

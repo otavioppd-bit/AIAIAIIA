@@ -23,7 +23,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { api, ApiError } from '@/lib/api';
 import { formatBytes, formatInteger, formatRelativeTime } from '@/lib/format';
 import { useAuth } from '@/hooks/useAuth';
-import { cn } from '@/lib/utils';
+import { cn, createId } from '@/lib/utils';
 import type { DatasetSummary, UploadResponse } from '@/types/api';
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -45,7 +45,9 @@ function WorkspaceContent() {
 
   const [uploadPercent, setUploadPercent] = useState(0);
   const [processing, setProcessing] = useState(false);
-  const [uploadSize, setUploadSize] = useState(0);
+  // Identifies this upload to the server's progress endpoint, so the stages
+  // shown are the ones the pipeline actually reached.
+  const [progressToken, setProgressToken] = useState('');
   const [pendingDelete, setPendingDelete] = useState<DatasetSummary | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(
     searchParams.get('onboarding') === '1' && !user?.onboarding_completed,
@@ -56,13 +58,18 @@ function WorkspaceContent() {
 
   const upload = useMutation({
     mutationFn: async (file: File) => {
-      setUploadSize(file.size);
+      const token = createId();
+      setProgressToken(token);
       setUploadPercent(0);
       setProcessing(false);
-      return api.datasets.upload(file, (percent) => {
-        setUploadPercent(percent);
-        if (percent >= 100) setProcessing(true);
-      });
+      return api.datasets.upload(
+        file,
+        (percent) => {
+          setUploadPercent(percent);
+          if (percent >= 100) setProcessing(true);
+        },
+        token,
+      );
     },
     onSuccess: async (response: UploadResponse) => {
       await queryClient.invalidateQueries({ queryKey: ['datasets'] });
@@ -139,12 +146,12 @@ function WorkspaceContent() {
 
         <section className="mt-8 animate-fade-up" aria-label="Enviar novo conjunto de dados">
           {isUploading ? (
-            <Card className="flex flex-col items-center justify-center p-10">
+            <Card className="flex flex-col items-center justify-center px-6 py-14 sm:py-20">
               <AnalysisProgress
                 uploadPercent={uploadPercent}
                 processing={processing}
                 done={upload.isSuccess}
-                sizeBytes={uploadSize}
+                token={progressToken}
               />
             </Card>
           ) : (
