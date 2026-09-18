@@ -3,11 +3,15 @@
 @tailwind utilities;
 
 /*
- * Design tokens.
+ * Blueprint design system.
  *
- * Every theme redefines the same variable names, so components never branch on
- * the active theme — they only consume tokens. `data-theme` selects the palette
- * and `data-theme-mode` tells Tailwind's `dark:` variant which side we are on.
+ * The interface is a technical drawing on a backlit surface: a near-black
+ * canvas, hairline dashed containment, one periwinkle annotation pen. Depth
+ * comes from the surface stack and the containment lines — never from shadow.
+ *
+ * Token names are semantic and stable; themes only redefine their values, so
+ * components never branch on the active theme. `data-theme` picks the palette,
+ * `data-theme-mode` tells Tailwind's `dark:` variant which side we are on.
  */
 @layer base {
   :root {
@@ -16,12 +20,16 @@
     --font-display: var(--font-sans-loaded), -apple-system, sans-serif;
     --font-mono: var(--font-mono-loaded), ui-monospace, 'SF Mono', monospace;
 
-    /* Radii */
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --radius-xl: 20px;
-    --radius-2xl: 28px;
+    /*
+     * Radii stay tight: a data instrument reads technical at 4–6px and toylike
+     * at 16px. Only pills (actions, tags) and icon wells go fully round.
+     */
+    --radius-sm: 2px;
+    --radius-md: 4px;
+    --radius-lg: 6px;
+    --radius-xl: 10px;
+    --radius-2xl: 20px;
+    --radius-pill: 100px;
 
     /* Motion */
     --ease-smooth: cubic-bezier(0.32, 0.72, 0, 1);
@@ -29,184 +37,104 @@
     --duration-base: 240ms;
     --duration-slow: 420ms;
 
-    /* Elevation — tuned per theme below */
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.04);
-    --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
-    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08), 0 2px 4px rgb(0 0 0 / 0.04);
-    --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.12), 0 4px 12px rgb(0 0 0 / 0.06);
-    --shadow-glow: 0 0 0 1px rgb(var(--color-primary) / 0.18),
-      0 8px 28px rgb(var(--color-primary) / 0.16);
+    /*
+     * "Elevation" is a hairline ring, never a blur. The token names survive so
+     * existing components keep compiling; what they resolve to no longer casts
+     * a shadow, because a shadow would break the drawing metaphor.
+     */
+    --shadow-xs: none;
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+    --shadow-glow: 0 0 0 1px rgb(var(--color-primary) / 0.35);
+
+    /* Containment — the system's signature stroke. */
+    --dash-pattern: 4px;
   }
 
-  /* ── Dark (default) ───────────────────────────────────────────────── */
+  /* ── Blueprint (dark, canonical) ──────────────────────────────────── */
   :root,
   [data-theme='dark'] {
-    --color-canvas: 9 9 14;
-    --color-surface: 17 17 24;
-    --color-surface-raised: 24 24 33;
-    --color-surface-sunken: 13 13 19;
-    --color-line: 38 38 50;
-    --color-line-strong: 58 58 74;
-    --color-ink: 244 244 248;
-    --color-ink-muted: 158 158 176;
-    --color-ink-subtle: 108 108 126;
-    --color-primary: 124 122 255;
-    --color-primary-soft: 40 38 82;
-    --color-primary-ink: 255 255 255;
-    --color-positive: 52 199 123;
-    --color-negative: 255 99 110;
-    --color-warning: 245 180 66;
-    --color-info: 86 170 255;
-    --color-violet: 167 139 250;
-    --color-teal: 45 212 191;
-    --color-amber: 251 191 36;
-    --color-rose: 251 113 133;
-    --color-sky: 56 189 248;
-    --shadow-lg: 0 20px 50px rgb(0 0 0 / 0.5), 0 6px 16px rgb(0 0 0 / 0.3);
-    --shadow-md: 0 6px 18px rgb(0 0 0 / 0.35);
-    --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.4);
+    --color-canvas: 0 0 0; /* Void */
+    --color-surface: 28 28 28; /* Carbon */
+    --color-surface-raised: 38 38 38;
+    --color-surface-sunken: 10 10 10;
+    --color-line: 48 48 48;
+    --color-line-strong: 77 77 77; /* Graphite */
+    --color-ink: 255 255 255; /* Paper */
+    --color-ink-muted: 171 171 171; /* Ash */
+    --color-ink-subtle: 128 128 128; /* Steel */
+    --color-primary: 112 137 186; /* Periwinkle annotation */
+    --color-primary-soft: 26 32 45;
+    --color-primary-ink: 0 0 0;
+
+    /*
+     * Direction is carried by glyph and weight, not by hue — so "positive" is
+     * the annotation pen and "negative" is plain paper. The one chromatic
+     * exception is destructive/error UI, where a neutral treatment would let a
+     * costly mistake pass unnoticed; it stays heavily desaturated.
+     */
+    --color-positive: 112 137 186;
+    --color-negative: 180 116 106;
+    --color-warning: 168 144 96;
+    --color-info: 112 137 186;
+
+    /* Legacy accent slots, re-valued into the blueprint range. */
+    --color-violet: 130 138 175;
+    --color-teal: 143 160 176;
+    --color-amber: 168 144 96;
+    --color-rose: 180 116 106;
+    --color-sky: 112 137 186;
   }
 
-  /* ── Light ────────────────────────────────────────────────────────── */
+  /* ── Paper (light) — export, print and presentation ───────────────── */
   [data-theme='light'] {
-    --color-canvas: 249 249 251;
-    --color-surface: 255 255 255;
-    --color-surface-raised: 255 255 255;
-    --color-surface-sunken: 244 244 248;
-    --color-line: 228 228 236;
-    --color-line-strong: 205 205 216;
-    --color-ink: 16 16 24;
-    --color-ink-muted: 98 98 116;
-    --color-ink-subtle: 140 140 158;
-    --color-primary: 88 86 214;
-    --color-primary-soft: 238 238 255;
-    --color-primary-ink: 255 255 255;
-    --color-positive: 22 163 94;
-    --color-negative: 220 60 70;
-    --color-warning: 202 138 4;
-    --color-info: 37 130 220;
-    --color-violet: 124 92 246;
-    --color-teal: 13 148 136;
-    --color-amber: 217 152 8;
-    --color-rose: 225 72 100;
-    --color-sky: 12 148 216;
-  }
-
-  /* ── Midnight — deep navy, highest contrast ───────────────────────── */
-  [data-theme='midnight'] {
-    --color-canvas: 6 10 24;
-    --color-surface: 12 18 38;
-    --color-surface-raised: 18 26 52;
-    --color-surface-sunken: 8 13 30;
-    --color-line: 30 42 74;
-    --color-line-strong: 48 64 104;
-    --color-ink: 232 240 255;
-    --color-ink-muted: 146 164 200;
-    --color-ink-subtle: 100 118 156;
-    --color-primary: 96 165 250;
-    --color-primary-soft: 22 44 86;
-    --color-primary-ink: 6 10 24;
-    --color-positive: 52 211 153;
-    --color-negative: 251 113 133;
-    --color-warning: 251 191 36;
-    --color-info: 125 211 252;
-    --color-violet: 165 180 252;
-    --color-teal: 45 212 191;
-    --color-amber: 252 211 77;
-    --color-rose: 244 114 182;
-    --color-sky: 125 211 252;
-  }
-
-  /* ── Minimal — near-monochrome, maximum negative space ───────────── */
-  [data-theme='minimal'] {
     --color-canvas: 255 255 255;
     --color-surface: 255 255 255;
-    --color-surface-raised: 252 252 252;
-    --color-surface-sunken: 247 247 247;
-    --color-line: 232 232 232;
-    --color-line-strong: 200 200 200;
-    --color-ink: 10 10 10;
-    --color-ink-muted: 110 110 110;
-    --color-ink-subtle: 155 155 155;
-    --color-primary: 10 10 10;
-    --color-primary-soft: 242 242 242;
+    --color-surface-raised: 250 250 250;
+    --color-surface-sunken: 245 245 245;
+    --color-line: 216 216 216;
+    --color-line-strong: 128 128 128;
+    --color-ink: 0 0 0;
+    --color-ink-muted: 77 77 77;
+    --color-ink-subtle: 128 128 128;
+    --color-primary: 74 95 138;
+    --color-primary-soft: 234 238 245;
     --color-primary-ink: 255 255 255;
-    --color-positive: 29 122 74;
-    --color-negative: 180 40 50;
-    --color-warning: 160 110 10;
-    --color-info: 60 60 60;
-    --color-violet: 90 90 90;
-    --color-teal: 45 45 45;
-    --color-amber: 130 130 130;
-    --color-rose: 70 70 70;
-    --color-sky: 115 115 115;
-    --radius-sm: 3px;
-    --radius-md: 4px;
-    --radius-lg: 6px;
-    --radius-xl: 8px;
-    --radius-2xl: 12px;
-    --shadow-sm: none;
-    --shadow-md: 0 1px 2px rgb(0 0 0 / 0.05);
-    --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.07);
+    --color-positive: 74 95 138;
+    --color-negative: 150 78 68;
+    --color-warning: 128 104 56;
+    --color-info: 74 95 138;
+    --color-violet: 92 100 136;
+    --color-teal: 96 116 134;
+    --color-amber: 128 104 56;
+    --color-rose: 150 78 68;
+    --color-sky: 74 95 138;
   }
 
-  /* ── Executive — warm paper, serif-leaning, boardroom ─────────────── */
-  [data-theme='executive'] {
-    --color-canvas: 249 247 243;
-    --color-surface: 255 253 250;
-    --color-surface-raised: 255 255 255;
-    --color-surface-sunken: 243 240 234;
-    --color-line: 228 222 212;
-    --color-line-strong: 202 194 180;
-    --color-ink: 28 26 22;
-    --color-ink-muted: 106 100 90;
-    --color-ink-subtle: 150 144 132;
-    --color-primary: 22 78 99;
-    --color-primary-soft: 226 238 242;
-    --color-primary-ink: 255 255 255;
-    --color-positive: 21 105 74;
-    --color-negative: 158 52 48;
-    --color-warning: 166 118 24;
-    --color-info: 30 96 122;
-    --color-violet: 91 78 122;
-    --color-teal: 32 116 110;
-    --color-amber: 176 128 40;
-    --color-rose: 154 64 74;
-    --color-sky: 46 118 152;
-    --font-display: 'Georgia', 'Times New Roman', serif;
-    --radius-sm: 2px;
-    --radius-md: 4px;
-    --radius-lg: 6px;
-    --radius-xl: 8px;
-  }
-
-  /* ── Data Focus — muted chrome so the charts carry all the colour ── */
-  [data-theme='data-focus'] {
-    --color-canvas: 14 16 20;
-    --color-surface: 21 24 30;
-    --color-surface-raised: 27 31 38;
-    --color-surface-sunken: 17 19 24;
-    --color-line: 40 45 55;
-    --color-line-strong: 62 69 82;
-    --color-ink: 236 240 246;
-    --color-ink-muted: 148 158 172;
-    --color-ink-subtle: 102 112 126;
-    --color-primary: 0 208 190;
-    --color-primary-soft: 10 56 54;
-    --color-primary-ink: 8 14 16;
-    --color-positive: 0 208 130;
-    --color-negative: 255 106 106;
-    --color-warning: 255 196 61;
-    --color-info: 88 180 255;
-    --color-violet: 186 148 255;
-    --color-teal: 0 208 190;
-    --color-amber: 255 196 61;
-    --color-rose: 255 122 158;
-    --color-sky: 88 180 255;
-    --radius-sm: 4px;
-    --radius-md: 6px;
-    --radius-lg: 8px;
-    --radius-xl: 12px;
+  /* ── High contrast — accessibility, not a style choice ────────────── */
+  [data-theme='contrast'] {
+    --color-canvas: 0 0 0;
+    --color-surface: 0 0 0;
+    --color-surface-raised: 20 20 20;
+    --color-surface-sunken: 0 0 0;
+    --color-line: 128 128 128;
+    --color-line-strong: 190 190 190;
+    --color-ink: 255 255 255;
+    --color-ink-muted: 230 230 230;
+    --color-ink-subtle: 190 190 190;
+    --color-primary: 160 184 230;
+    --color-primary-soft: 32 40 58;
+    --color-primary-ink: 0 0 0;
+    --color-positive: 160 184 230;
+    --color-negative: 232 160 148;
+    --color-warning: 226 196 140;
+    --color-info: 160 184 230;
+    --color-violet: 176 186 220;
+    --color-teal: 186 202 216;
+    --color-amber: 226 196 140;
+    --color-rose: 232 160 148;
+    --color-sky: 160 184 230;
   }
 
   * {
@@ -221,15 +149,15 @@
   body {
     @apply bg-canvas text-ink antialiased;
     font-family: var(--font-sans);
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    /* Tabular figures everywhere: a column of numbers has to align. */
+    font-feature-settings: 'tnum' on, 'cv02', 'cv03', 'cv04', 'cv11';
     text-rendering: optimizeLegibility;
   }
 
   ::selection {
-    background-color: rgb(var(--color-primary) / 0.25);
+    background-color: rgb(var(--color-primary) / 0.3);
   }
 
-  /* Scrollbars that belong to the theme rather than the OS. */
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -249,7 +177,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid rgb(var(--color-primary));
+    outline: 1px solid rgb(var(--color-primary));
     outline-offset: 2px;
     border-radius: var(--radius-sm);
   }
@@ -267,47 +195,198 @@
 }
 
 @layer components {
-  .glass {
-    background: rgb(var(--color-surface) / 0.72);
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    border: 1px solid rgb(var(--color-line) / 0.8);
+  /*
+   * Containment. A section is a drawing pinned to the canvas, so its edge is
+   * dashed; solid hairlines are reserved for buttons, inputs and inline chips.
+   */
+  .card {
+    @apply rounded-lg bg-surface;
+    border: 1px dashed rgb(var(--color-line-strong) / 0.55);
   }
 
-  .card {
+  .card-raised {
+    @apply card;
+    background: rgb(var(--color-surface-raised));
+  }
+
+  /* A solid-edged container, for controls rather than sections. */
+  .panel {
     @apply rounded-lg border border-line bg-surface;
   }
 
-  /* Hairline top highlight — reads as depth without a heavy border. */
-  .card-raised {
-    @apply card shadow-md;
-    position: relative;
-  }
-  .card-raised::before {
-    content: '';
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 1px;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgb(var(--color-ink) / 0.07),
-      transparent
-    );
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    pointer-events: none;
+  .rule-dashed {
+    border-top: 1px dashed rgb(var(--color-line-strong) / 0.5);
   }
 
-  .text-gradient {
-    background: linear-gradient(
-      135deg,
-      rgb(var(--color-ink)) 0%,
-      rgb(var(--color-ink) / 0.72) 45%,
-      rgb(var(--color-primary)) 130%
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+  .glass {
+    background: rgb(var(--color-surface) / 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgb(var(--color-line) / 0.9);
+  }
+
+  /*
+   * Display type. Inter's axis tops out at 900 where the reference calls for
+   * 1000, so the blocky silhouette is recovered with tighter tracking and a
+   * larger optical size rather than a fake bold.
+   */
+  .display {
+    font-family: var(--font-display);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    line-height: 1.04;
+  }
+
+  /* All-caps technical micro-label — the only monospace moment. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    line-height: 1.6;
+  }
+
+  .mono-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Figures read as instrument output: tabular, tight, unambiguous. */
+  .numeric {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' on, 'zero' on;
+    letter-spacing: -0.02em;
+  }
+
+  /*
+   * ── Background field ──────────────────────────────────────────────────
+   * Depth without weight: a light wash, a converging grid, a grain, and a
+   * vignette. Every layer is a paint, not a frame loop, and all of them are
+   * pinned behind the content and inert to the pointer.
+   */
+  .field {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    color: rgb(var(--color-primary));
+  }
+
+  /* The desk lamp on the drafting table. */
+  .field-wash {
+    position: absolute;
+    inset: -20%;
+    background:
+      radial-gradient(
+        ellipse 55% 45% at calc(50% + var(--px, 0) * 2%) calc(12% + var(--py, 0) * 2%),
+        rgb(var(--color-primary) / 0.16),
+        transparent 70%
+      ),
+      radial-gradient(
+        ellipse 70% 50% at 50% 0%,
+        rgb(var(--color-ink) / 0.045),
+        transparent 65%
+      );
+    transition: background 400ms var(--ease-smooth);
+  }
+
+  /* Flat blueprint ruling — quiet enough to sit under dense data. */
+  .field-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgb(var(--color-ink) / 0.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--color-ink) / 0.028) 1px, transparent 1px);
+    background-size: 56px 56px;
+    background-position: center;
+    mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 30%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 30%, transparent 100%);
+    transform: translate3d(calc(var(--px, 0) * -6px), calc(var(--py, 0) * -6px), 0);
+  }
+
+  /*
+   * The same ruling laid into the floor. Real perspective, so the lines
+   * actually converge toward a horizon the 3D structure can stand on.
+   */
+  .field-horizon {
+    position: absolute;
+    inset: 38% -40% -30% -40%;
+    perspective: 340px;
+    perspective-origin: 50% 0%;
+    mask-image: linear-gradient(to bottom, #000 0%, transparent 78%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 78%);
+  }
+  .field-horizon::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: rotateX(72deg) translate3d(calc(var(--px, 0) * -10px), 0, 0);
+    transform-origin: 50% 0%;
+    background-image:
+      linear-gradient(rgb(var(--color-primary) / 0.22) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--color-primary) / 0.16) 1px, transparent 1px);
+    background-size: 90px 90px;
+  }
+
+  .field-nodes {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.5;
+    transform: translate3d(calc(var(--px, 0) * 10px), calc(var(--py, 0) * 10px), 0);
+  }
+
+  .field-wireframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.16;
+    color: rgb(var(--color-ink));
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 30%, #000 20%, transparent 90%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 80% at 50% 30%, #000 20%, transparent 90%);
+  }
+
+  /*
+   * Grain. Without it the gradients band visibly on wide dark surfaces; the
+   * turbulence is inlined so it costs no request.
+   */
+  .field-grain {
+    position: absolute;
+    inset: 0;
+    opacity: 0.032;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .field-vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 70% at 50% 40%, transparent 40%, rgb(var(--color-canvas) / 0.85) 100%);
+  }
+
+  /* On Paper the field would be soot on a clean sheet: keep only the ruling. */
+  [data-theme-mode='light'] .field-wash,
+  [data-theme-mode='light'] .field-grain,
+  [data-theme-mode='light'] .field-vignette {
+    display: none;
+  }
+
+  /*
+   * The structure rises out of the floor behind the headline rather than
+   * crossing it: anything above the text block is masked away, so the type
+   * never has to compete with the lattice for legibility.
+   */
+  .hero-structure {
+    opacity: 0.6;
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 26%, #000 72%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 26%, #000 72%, transparent 100%);
   }
 
   .skeleton {

@@ -425,3 +425,66 @@ def test_plain_categories_never_become_a_map():
     column = next(c for c in bundle.profile["columns"] if c["name"] == "categoria")
     assert column["semantic_type"] != sem.GEO
     assert all(r["chart_type"] != "map" for r in bundle.analysis["recommendations"])
+
+
+def test_thin_dataset_still_reaches_the_chart_floor():
+    """Two columns is enough for four genuinely different questions, so a thin
+    dataset should not land on a one-chart dashboard."""
+    rng = np.random.default_rng(9)
+    n = 200
+    frame = pd.DataFrame(
+        {
+            "categoria": rng.choice(["A", "B", "C", "D"], n),
+            "receita": rng.gamma(2, 300, n).round(2),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    recs = bundle.analysis["recommendations"]
+    assert len(recs) >= 4, f"apenas {len(recs)} gráficos para um dataset utilizável"
+    # Every chart still carries the reasoning that justifies it — the floor is
+    # reached by re-admitting real candidates, never by inventing filler.
+    for rec in recs:
+        assert rec["rationale"].strip()
+        assert rec["principle"].strip()
+
+
+def test_a_single_column_is_not_padded_with_invented_charts():
+    """The floor is best-effort, not a quota: one numeric column supports a
+    histogram and a box plot, and nothing else honest exists to add."""
+    rng = np.random.default_rng(4)
+    frame = pd.DataFrame({"valor": rng.gamma(2, 100, 80).round(2)})
+    bundle = analyse_csv_bytes(_csv(frame))
+    types = [r["chart_type"] for r in bundle.analysis["recommendations"]]
+    assert types, "uma coluna numérica ainda rende alguma análise"
+    assert set(types) <= {"histogram", "box_plot"}, types
+
+
+def test_grouped_box_plot_answers_what_a_total_hides():
+    """A category can lead on total while being the least consistent of the
+    set; only the per-group quartiles show that."""
+    rng = np.random.default_rng(12)
+    n = 300
+    frame = pd.DataFrame(
+        {
+            "loja": rng.choice(["Centro", "Norte", "Sul"], n),
+            "ticket": rng.gamma(2, 120, n).round(2),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+    grouped = [
+        r for r in bundle.analysis["recommendations"]
+        if r["chart_type"] == "box_plot" and r["encoding"].get("x") == "loja"
+    ]
+    assert grouped, "faltou o box plot agrupado"
+    assert grouped[0]["encoding"]["y"] == "ticket"
+
+    from app.services import widget_data
+
+    result = widget_data.resolve(
+        bundle.frame, bundle.profile, bundle.analysis,
+        chart_type="box_plot", encoding=grouped[0]["encoding"],
+    )
+    # One box per store, each with real quartiles.
+    assert len(result["rows"]) == 3
+    for row in result["rows"]:
+        assert row["q1"] <= row["median"] <= row["q3"]

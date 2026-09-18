@@ -1,17 +1,20 @@
 /**
- * Chart palette.
+ * Chart palette — blueprint edition.
  *
- * Both columns are validated with the data-viz palette checker against this
- * product's real chart surfaces (light #ffffff, dark #111118):
+ * The chrome is monochromatic by design rule; data marks are the one place
+ * where that rule has to bend, because encoding demands difference. The bend is
+ * disciplined: two families only — a cool periwinkle pen and a warm graphite
+ * pencil — walking a single monotonic lightness ladder. Series are told apart
+ * by value first and temperature second, never by hue alone, which is what
+ * makes the set hold up under colour-vision deficiency.
  *
- *   dark  — lightness band PASS · chroma PASS · adjacent CVD ΔE 8.4 PASS ·
- *           normal-vision ΔE 19.3 PASS · contrast ≥3:1 PASS
- *   light — same gates PASS, with a contrast WARN on aqua/yellow/magenta.
- *           The relief rule is satisfied product-wide: every chart ships a
- *           legend plus tooltip, and each dashboard includes a data table.
+ * Every claim here is enforced by tests/palette.test.ts rather than asserted:
+ * contrast >= 3:1 against both chart surfaces, all-pairs dE >= 10, and the same
+ * floor under simulated protanopia, deuteranopia and tritanopia.
  *
- * Slots are assigned in fixed order and never cycled. Past eight series the
- * query engine folds the tail into "Outros" rather than inventing a ninth hue.
+ * Six slots is the honest ceiling for this band — an eighth step would collapse
+ * either contrast or separation — so the query engine folds the tail into
+ * "Outros" rather than shipping two series a reader cannot tell apart.
  */
 
 export interface PaletteSet {
@@ -31,50 +34,49 @@ export interface PaletteSet {
 export const ALL_PAIRS_SAFE_SLOTS = 3;
 
 /** Past this, fold the tail into "Outros" instead of generating a hue. */
-export const MAX_CATEGORICAL_SERIES = 8;
+export const MAX_CATEGORICAL_SERIES = 6;
 
 const LIGHT_CATEGORICAL = [
-  '#2a78d6', // 1 blue
-  '#eb6834', // 2 orange
-  '#1baf7a', // 3 aqua
-  '#eda100', // 4 yellow
-  '#e87ba4', // 5 magenta
-  '#008300', // 6 green
-  '#4a3aa7', // 7 violet
-  '#e34948', // 8 red
+  '#4a5f8a', // 1 periwinkle — the annotation pen leads
+  '#211f1c', // 2 graphite, near-black
+  '#7d8ca6', // 3 periwinkle, lifted
+  '#6b645b', // 4 graphite, warm mid
+  '#2e3b56', // 5 periwinkle, deep
+  '#8c877e', // 6 graphite, warm light
 ];
 
 const DARK_CATEGORICAL = [
-  '#3987e5',
-  '#d95926',
-  '#199e70',
-  '#c98500',
-  '#d55181',
-  '#008300',
-  '#9085e9',
-  '#e66767',
+  '#7089ba', // 1 periwinkle — the annotation pen leads
+  '#ece8e1', // 2 graphite, near-paper
+  '#5c6e94', // 3 periwinkle, deep
+  '#a59e93', // 4 graphite, warm mid
+  '#b0bfdd', // 5 periwinkle, lifted
+  '#6d6862', // 6 graphite, warm deep
 ];
 
-// One hue, light → dark. Never a rainbow.
+// One hue, walked end to end. Never a rainbow.
 const LIGHT_SEQUENTIAL = [
-  '#cde2fb', '#b7d3f6', '#9ec5f4', '#86b6ef', '#6da7ec',
-  '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95',
+  '#e6eaf2', '#d5dce8', '#c4cdde', '#b2bfd4', '#a1b1ca',
+  '#8fa2c0', '#7e94b6', '#6d85ac', '#5c7099', '#455780', '#2e3b56',
 ];
 const DARK_SEQUENTIAL = [
-  '#0d366b', '#104281', '#184f95', '#1c5cab', '#256abf',
-  '#2a78d6', '#3987e5', '#5598e7', '#6da7ec', '#86b6ef', '#9ec5f4',
+  '#1d2433', '#26304a', '#2f3b5c', '#3a4a6f', '#465a86',
+  '#54699a', '#6379ac', '#7089ba', '#8a9fca', '#a6b7da', '#c6d2e9',
 ];
 
-// Two hues that read as opposite, with a neutral grey midpoint.
+/*
+ * Two pens that read as opposite without either being alarming: the cool
+ * annotation against the warm pencil, through a neutral graphite midpoint.
+ */
 const DIVERGING_LIGHT = {
-  negative: ['#8c1d18', '#b3251f', '#d33a30', '#e5695f', '#f0a59d'],
-  neutral: '#f0efec',
-  positive: ['#cde2fb', '#86b6ef', '#3987e5', '#256abf', '#0d366b'],
+  negative: ['#5c3a30', '#7a4e41', '#9a6a5b', '#b98d7f', '#d6b4a8'],
+  neutral: '#e9e7e3',
+  positive: ['#dbe2ef', '#b0bfdd', '#7089ba', '#4a5f8a', '#2c3a58'],
 };
 const DIVERGING_DARK = {
-  negative: ['#7a1a16', '#a6231d', '#c9362c', '#e06a60', '#eda49c'],
-  neutral: '#383835',
-  positive: ['#0d366b', '#184f95', '#2a78d6', '#5598e7', '#9ec5f4'],
+  negative: ['#4a2f27', '#653f34', '#845549', '#a37264', '#c29a8b'],
+  neutral: '#3a3835',
+  positive: ['#26304a', '#3d4d72', '#5c6e94', '#7089ba', '#b0bfdd'],
 };
 
 export const PALETTES: Record<'light' | 'dark', PaletteSet> = {
@@ -83,34 +85,34 @@ export const PALETTES: Record<'light' | 'dark', PaletteSet> = {
     sequential: LIGHT_SEQUENTIAL,
     diverging: DIVERGING_LIGHT,
     status: {
-      positive: '#1a7f4b',
-      warning: '#a66f10',
-      negative: '#b3251f',
-      info: '#256abf',
+      positive: '#4a5f8a',
+      warning: '#806838',
+      negative: '#964e44',
+      info: '#4a5f8a',
     },
     surface: '#ffffff',
-    grid: 'rgba(16,16,24,0.07)',
-    axis: 'rgba(16,16,24,0.16)',
-    textPrimary: 'rgba(16,16,24,0.92)',
-    textSecondary: 'rgba(16,16,24,0.62)',
-    textMuted: 'rgba(16,16,24,0.42)',
+    grid: 'rgba(0,0,0,0.08)',
+    axis: 'rgba(0,0,0,0.22)',
+    textPrimary: 'rgba(0,0,0,0.92)',
+    textSecondary: 'rgba(0,0,0,0.58)',
+    textMuted: 'rgba(0,0,0,0.40)',
   },
   dark: {
     categorical: DARK_CATEGORICAL,
     sequential: DARK_SEQUENTIAL,
     diverging: DIVERGING_DARK,
     status: {
-      positive: '#34c77b',
-      warning: '#f5b442',
-      negative: '#ff636e',
-      info: '#56aaff',
+      positive: '#7089ba',
+      warning: '#a89060',
+      negative: '#b4746a',
+      info: '#7089ba',
     },
-    surface: '#111118',
-    grid: 'rgba(244,244,248,0.07)',
-    axis: 'rgba(244,244,248,0.18)',
-    textPrimary: 'rgba(244,244,248,0.92)',
-    textSecondary: 'rgba(244,244,248,0.6)',
-    textMuted: 'rgba(244,244,248,0.4)',
+    surface: '#1c1c1c',
+    grid: 'rgba(255,255,255,0.07)',
+    axis: 'rgba(255,255,255,0.20)',
+    textPrimary: 'rgba(255,255,255,0.94)',
+    textSecondary: 'rgba(255,255,255,0.62)',
+    textMuted: 'rgba(255,255,255,0.42)',
   },
 };
 
@@ -161,13 +163,15 @@ export function divergingRamp(mode: 'light' | 'dark'): string[] {
 /** Accent token → concrete hex, for per-widget accent overrides. */
 export function accentColor(accent: string, mode: 'light' | 'dark'): string {
   const palette = PALETTES[mode];
+  // The legacy accent names survive as stored widget settings; each resolves
+  // into the blueprint set rather than reviving the hue it was named after.
   const map: Record<string, string> = {
     primary: palette.categorical[0],
-    violet: palette.categorical[6],
-    teal: palette.categorical[2],
+    violet: palette.categorical[2],
+    teal: palette.categorical[4],
     amber: palette.categorical[3],
-    rose: palette.categorical[4],
-    sky: palette.categorical[0],
+    rose: palette.categorical[5],
+    sky: palette.categorical[1],
   };
   return map[accent] ?? palette.categorical[0];
 }

@@ -1,13 +1,13 @@
 'use client';
 
 import { Scene } from './Scene';
-import { DataOrb } from './DataOrb';
+import { DataLattice } from './DataLattice';
 import { OrbPlaceholder } from './LazyDataOrb';
 import { PALETTES } from '@/lib/palette';
 import { useTheme } from '@/hooks/useTheme';
 
 /**
- * The orb plus its WebGL host, bundled together so the whole 3D dependency
+ * The lattice plus its WebGL host, bundled together so the whole 3D dependency
  * graph sits behind a single dynamic import.
  */
 export function OrbScene({
@@ -27,14 +27,14 @@ export function OrbScene({
   return (
     <Scene
       className={className}
-      camera={{ position: [0, 0, cameraDistance], fov: 42 }}
+      camera={{ position: [0, 0.5, cameraDistance], fov: 42 }}
       fallback={<OrbPlaceholder />}
     >
-      <DataOrb
+      <DataLattice
         recordCount={recordCount}
         coherence={coherence}
         accent={palette.categorical[0]}
-        secondary={palette.categorical[2]}
+        secondary={mode === 'dark' ? '#ffffff' : palette.categorical[1]}
         mode={mode}
       />
     </Scene>

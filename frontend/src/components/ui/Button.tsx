@@ -7,22 +7,27 @@ import { cn } from '@/lib/utils';
 type Variant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'danger' | 'subtle';
 type Size = 'xs' | 'sm' | 'md' | 'lg';
 
+/*
+ * A button here is the wireframe of a button: an outlined pill, never a fill.
+ * Hierarchy comes from the weight of the stroke, and the primary action earns
+ * its emphasis by inverting on hover rather than by sitting there filled.
+ */
 const VARIANTS: Record<Variant, string> = {
   primary:
-    'bg-primary text-primary-ink hover:brightness-110 active:brightness-95 shadow-sm',
+    'border border-ink text-ink hover:bg-ink hover:text-canvas active:brightness-90',
   secondary:
-    'bg-surface-raised text-ink border border-line hover:border-line-strong hover:bg-surface',
-  outline: 'border border-line text-ink hover:bg-surface-raised hover:border-line-strong',
-  ghost: 'text-ink-muted hover:text-ink hover:bg-surface-raised',
-  subtle: 'bg-primary-soft text-primary hover:brightness-105',
-  danger: 'bg-negative text-white hover:brightness-110',
+    'border border-line-strong/70 text-ink hover:border-ink hover:bg-ink/5',
+  outline: 'border border-line text-ink-muted hover:text-ink hover:border-line-strong',
+  ghost: 'text-ink-muted hover:text-ink hover:bg-ink/5',
+  subtle: 'border border-primary/45 text-primary hover:border-primary hover:bg-primary/10',
+  danger: 'border border-negative text-negative hover:bg-negative hover:text-canvas',
 };
 
 const SIZES: Record<Size, string> = {
-  xs: 'h-7 px-2.5 text-xs gap-1.5 rounded-sm',
-  sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-md',
-  md: 'h-10 px-4 text-sm gap-2 rounded-md',
-  lg: 'h-12 px-6 text-[15px] gap-2.5 rounded-lg',
+  xs: 'h-7 px-3 text-xs gap-1.5 rounded-pill',
+  sm: 'h-8 px-3.5 text-[13px] gap-1.5 rounded-pill',
+  md: 'h-9 px-4 text-sm gap-2 rounded-pill',
+  lg: 'h-11 px-6 text-[15px] gap-2.5 rounded-pill',
 };
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {

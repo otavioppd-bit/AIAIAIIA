@@ -37,8 +37,19 @@ const config: Config = {
         mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
         display: ['var(--font-display)', 'var(--font-sans)', 'sans-serif'],
       },
+      /*
+       * The reference scale is 9 / 12 / 14 / 16 / 24 / 32 / 70 — going to 18 or
+       * 28 collapses its rhythm, so intermediate steps are deliberately absent.
+       */
       fontSize: {
-        '2xs': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.01em' }],
+        eyebrow: ['9px', { lineHeight: '1.6', letterSpacing: '0.18em' }],
+        '2xs': ['11px', { lineHeight: '1rem', letterSpacing: '0.04em' }],
+        caption: ['12px', { lineHeight: '1.2' }],
+        'body-sm': ['14px', { lineHeight: '1.6', letterSpacing: '-0.14px' }],
+        body: ['16px', { lineHeight: '1.6', letterSpacing: '-0.16px' }],
+        subheading: ['24px', { lineHeight: '1.4', letterSpacing: '-0.24px' }],
+        heading: ['32px', { lineHeight: '1.2', letterSpacing: '-0.32px' }],
+        display: ['70px', { lineHeight: '1.04', letterSpacing: '-0.04em' }],
       },
       borderRadius: {
         sm: 'var(--radius-sm)',
@@ -47,6 +58,7 @@ const config: Config = {
         lg: 'var(--radius-lg)',
         xl: 'var(--radius-xl)',
         '2xl': 'var(--radius-2xl)',
+        pill: 'var(--radius-pill)',
       },
       boxShadow: {
         xs: 'var(--shadow-xs)',
@@ -59,6 +71,7 @@ const config: Config = {
         '4.5': '1.125rem',
         '18': '4.5rem',
       },
+      borderWidth: { hairline: '1px' },
       transitionTimingFunction: {
         smooth: 'cubic-bezier(0.32, 0.72, 0, 1)',
         emphasis: 'cubic-bezier(0.4, 0, 0.2, 1)',

@@ -10,45 +10,24 @@ export interface ThemeDefinition {
 export const THEMES: ThemeDefinition[] = [
   {
     id: 'dark',
-    name: 'Dark',
-    description: 'Contraste alto sobre fundo profundo. Padrão da plataforma.',
+    name: 'Blueprint',
+    description: 'A superfície canônica: void quase preto, contenção tracejada, uma só caneta de anotação.',
     mode: 'dark',
-    preview: ['#111118', '#7c7aff', '#34c77b'],
+    preview: ['#000000', '#1c1c1c', '#7089ba'],
   },
   {
     id: 'light',
-    name: 'Light',
-    description: 'Claro e neutro, ideal para apresentações e impressão.',
+    name: 'Paper',
+    description: 'O mesmo desenho sobre papel — para exportar, imprimir e apresentar.',
     mode: 'light',
-    preview: ['#ffffff', '#5856d6', '#16a35e'],
+    preview: ['#ffffff', '#d8d8d8', '#4a5f8a'],
   },
   {
-    id: 'midnight',
-    name: 'Midnight',
-    description: 'Azul-marinho profundo com acentos frios.',
+    id: 'contrast',
+    name: 'Alto contraste',
+    description: 'Contraste elevado e linhas mais fortes, para leitura com baixa visão.',
     mode: 'dark',
-    preview: ['#0c1226', '#60a5fa', '#34d399'],
-  },
-  {
-    id: 'minimal',
-    name: 'Minimal',
-    description: 'Quase monocromático. Máximo espaço negativo, zero ruído.',
-    mode: 'light',
-    preview: ['#ffffff', '#0a0a0a', '#1d7a4a'],
-  },
-  {
-    id: 'executive',
-    name: 'Executive',
-    description: 'Papel quente e tipografia serifada para relatórios.',
-    mode: 'light',
-    preview: ['#f9f7f3', '#164e63', '#15694a'],
-  },
-  {
-    id: 'data-focus',
-    name: 'Data Focus',
-    description: 'Cromo neutro para que os gráficos carreguem toda a cor.',
-    mode: 'dark',
-    preview: ['#151820', '#00d0be', '#58b4ff'],
+    preview: ['#000000', '#bebebe', '#a0b8e6'],
   },
 ];
 
@@ -73,11 +52,9 @@ export const THEME_BOOTSTRAP_SCRIPT = `
   try {
     var stored = localStorage.getItem('${THEME_STORAGE_KEY}');
     var valid = ${JSON.stringify(THEME_IDS)};
-    var theme = valid.indexOf(stored) !== -1 ? stored : null;
-    if (!theme) {
-      var prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-      theme = prefersLight ? 'light' : '${DEFAULT_THEME}';
-    }
+    // Dark is the identity, not a preference: the blueprint only exists on the
+    // void. A light-mode OS no longer overrides it — the picker still can.
+    var theme = valid.indexOf(stored) !== -1 ? stored : '${DEFAULT_THEME}';
     var lightThemes = ${JSON.stringify(THEMES.filter((t) => t.mode === 'light').map((t) => t.id))};
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.setAttribute(

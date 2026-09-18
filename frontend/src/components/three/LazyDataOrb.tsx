@@ -16,11 +16,19 @@ const OrbScene = dynamic(() => import('./OrbScene').then((module) => module.OrbS
 export function OrbPlaceholder({ className }: { className?: string }) {
   return (
     <div className={cn('flex h-full w-full items-center justify-center', className)} aria-hidden>
-      <div className="relative h-32 w-32">
-        <div className="absolute inset-0 rounded-full border border-line" />
-        <div className="absolute inset-4 rounded-full border border-line/60" />
-        <div className="absolute inset-8 rounded-full bg-primary-soft/40 blur-xl" />
-      </div>
+      <svg viewBox="0 0 120 120" className="h-32 w-32 text-primary/40">
+        <g stroke="currentColor" strokeWidth="0.6" fill="none">
+          <path d="M30 40 L60 28 L90 40 L60 52 Z" />
+          <path d="M30 40 V72 L60 84 V52 M90 40 V72 L60 84" />
+          <path d="M20 96 H100 M34 104 H86" strokeDasharray="3 4" />
+        </g>
+        <g fill="currentColor">
+          <circle cx="30" cy="40" r="1.6" /><circle cx="60" cy="28" r="1.6" />
+          <circle cx="90" cy="40" r="1.6" /><circle cx="60" cy="52" r="1.6" />
+          <circle cx="30" cy="72" r="1.6" /><circle cx="90" cy="72" r="1.6" />
+          <circle cx="60" cy="84" r="1.6" />
+        </g>
+      </svg>
     </div>
   );
 }

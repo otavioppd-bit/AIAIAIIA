@@ -5,6 +5,7 @@ import {
   ArrowRight, BarChart3, Bot, Brain, Check, Compass, Database,
   FileSpreadsheet, Gauge, Lock, Palette, Shield, Sparkles, TrendingUp, Upload, Zap,
 } from 'lucide-react';
+import { BackgroundField } from '@/components/background/BackgroundField';
 import { LandingNav } from '@/components/landing/Nav';
 import { DashboardPreview } from '@/components/landing/DashboardPreview';
 import { LazyDataOrb } from '@/components/three/LazyDataOrb';
@@ -19,63 +20,66 @@ export default function LandingPage() {
 
       <main id="conteudo">
         {/* ── Hero ───────────────────────────────────────────────────── */}
-        <section className="relative overflow-hidden pt-32 sm:pt-40">
-          <div className="relative mx-auto max-w-6xl px-5">
-            <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr]">
-              <div className="animate-fade-up">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-2xs font-medium text-ink-muted">
-                  <Sparkles className="h-3 w-3 text-primary" />
-                  Do CSV ao dashboard em um passo
-                </span>
+        <section className="relative overflow-hidden pt-28 sm:pt-36">
+          <BackgroundField variant="hero" />
 
-                <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-[54px]">
-                  Transforme seus
-                  <br />
-                  <span className="text-gradient">dados em decisões.</span>
-                </h1>
+          {/*
+            The structure stands on the field's horizon rather than beside the
+            text, so the grid, the lattice and the headline read as one space.
+          */}
+          <div className="hero-structure pointer-events-none absolute inset-x-0 top-[42%] z-0 mx-auto h-[620px] max-w-5xl">
+            <LazyDataOrb
+              className="absolute inset-0"
+              recordCount={48000}
+              coherence={0.92}
+              cameraDistance={7.2}
+            />
+          </div>
 
-                <p className="mt-5 max-w-lg text-[15px] leading-relaxed text-ink-muted">
-                  Envie um arquivo CSV. A plataforma entende cada coluna, identifica padrões reais,
-                  escolhe as visualizações adequadas por princípios de visualização de dados e monta
-                  um dashboard interativo — que você personaliza por completo.
-                </p>
+          <div className="relative z-10 mx-auto max-w-6xl px-5">
+            <div className="mx-auto max-w-[760px] text-center animate-fade-up">
+              <span className="eyebrow inline-flex items-center gap-2 rounded-pill border border-dashed border-ink/35 px-3 py-1 text-ink">
+                <Sparkles className="h-2.5 w-2.5 text-primary" />
+                Do CSV ao dashboard em um passo
+              </span>
 
-                <div className="mt-7 flex flex-wrap items-center gap-3">
-                  <Link href="/register">
-                    <Button size="lg" iconRight={<ArrowRight className="h-4 w-4" />}>
-                      Começar grátis
-                    </Button>
-                  </Link>
-                  <a href="#como-funciona">
-                    <Button size="lg" variant="secondary">
-                      Ver como funciona
-                    </Button>
-                  </a>
-                </div>
+              <h1 className="display mt-6 text-[44px] sm:text-[64px] lg:text-[70px]">
+                Seus dados,
+                <br />
+                compreendidos.
+              </h1>
 
-                <ul className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-ink-subtle">
-                  {['Sem cartão de crédito', 'Formatos brasileiros nativos', 'Seus dados isolados'].map(
-                    (item) => (
-                      <li key={item} className="flex items-center gap-1.5">
-                        <Check className="h-3.5 w-3.5 text-positive" />
-                        {item}
-                      </li>
-                    ),
-                  )}
-                </ul>
+              <p className="mx-auto mt-6 max-w-[540px] text-body text-ink-muted">
+                Envie um CSV. A plataforma entende cada coluna, encontra os padrões que existem de
+                fato e monta a análise — sem você escolher um único gráfico.
+              </p>
+
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <Link href="/register">
+                  <Button size="lg" iconRight={<ArrowRight className="h-4 w-4" />}>
+                    Começar grátis
+                  </Button>
+                </Link>
+                <a href="#como-funciona">
+                  <Button size="lg" variant="ghost">
+                    Ver como funciona
+                  </Button>
+                </a>
               </div>
 
-              <div className="relative h-72 sm:h-96 lg:h-[420px]">
-                <LazyDataOrb
-                  className="absolute inset-0"
-                  recordCount={48000}
-                  coherence={0.92}
-                  cameraDistance={6.4}
-                />
-              </div>
+              <ul className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-caption text-ink-subtle">
+                {['Sem cartão de crédito', 'Formatos brasileiros nativos', 'Seus dados isolados'].map(
+                  (item) => (
+                    <li key={item} className="flex items-center gap-1.5">
+                      <Check className="h-3 w-3 text-primary" />
+                      {item}
+                    </li>
+                  ),
+                )}
+              </ul>
             </div>
 
-            <div className="mt-14 animate-fade-up pb-20 sm:mt-20">
+            <div className="mt-20 animate-fade-up pb-20 sm:mt-28">
               <DashboardPreview />
             </div>
           </div>

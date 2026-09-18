@@ -6,11 +6,13 @@ import './globals.css';
 
 // Self-hosted by Next at build time: no render-blocking request, no layout
 // shift, and the families are exposed as the CSS variables the theme uses.
+// The variable axis is loaded whole: the display type needs weight 900, which
+// a fixed weight list would not reach, and the variable file is smaller than
+// the six static cuts it replaces.
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-sans-loaded',
-  weight: ['400', '500', '600', '700', '800'],
 });
 
 const jetbrainsMono = JetBrains_Mono({

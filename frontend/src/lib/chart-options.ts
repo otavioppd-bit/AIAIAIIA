@@ -59,15 +59,29 @@ function baseTextStyle(mode: ThemeMode) {
   };
 }
 
+/**
+ * Figures on an axis are instrument output, so they are set in the monospace
+ * face: the digits align column to column and the tick labels stop shifting
+ * width as the values change.
+ */
+function numericTextStyle(mode: ThemeMode) {
+  return {
+    fontFamily: 'var(--font-mono), ui-monospace, monospace',
+    color: PALETTES[mode].textMuted,
+    fontSize: 10,
+  };
+}
+
 function tooltipBase(mode: ThemeMode) {
   const palette = PALETTES[mode];
   return {
-    backgroundColor: mode === 'dark' ? 'rgba(24,24,33,0.96)' : 'rgba(255,255,255,0.98)',
-    borderColor: mode === 'dark' ? 'rgba(58,58,74,0.9)' : 'rgba(228,228,236,1)',
+    backgroundColor: mode === 'dark' ? 'rgba(20,20,20,0.97)' : 'rgba(255,255,255,0.98)',
+    borderColor: mode === 'dark' ? 'rgba(128,128,128,0.45)' : 'rgba(0,0,0,0.18)',
     borderWidth: 1,
-    padding: [10, 12],
-    extraCssText:
-      'border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,0.18);backdrop-filter:blur(8px);',
+    padding: [9, 11],
+    // A hairline and a tight radius, no drop shadow: the tooltip is another
+    // element of the drawing, not a floating card.
+    extraCssText: 'border-radius:4px;box-shadow:none;',
     textStyle: { color: palette.textPrimary, fontSize: 12, fontFamily: 'var(--font-sans)' },
   };
 }
@@ -321,8 +335,7 @@ function buildLine(ctx: BuildContext, filled: boolean): EChartsOption {
       axisTick: { show: false },
       splitLine: splitLineStyle(style.showGrid !== false, mode),
       axisLabel: {
-        ...baseTextStyle(mode),
-        color: palette.textMuted,
+        ...numericTextStyle(mode),
         formatter: axisValueFormatter(format),
       },
       // Index charts read against their 100 baseline.
@@ -458,8 +471,7 @@ function buildBar(
     axisTick: { show: false },
     splitLine: splitLineStyle(style.showGrid !== false, mode),
     axisLabel: {
-      ...baseTextStyle(mode),
-      color: palette.textMuted,
+      ...numericTextStyle(mode),
       formatter: axisValueFormatter(valueFormat),
     },
   };
@@ -658,7 +670,7 @@ function buildScatter(ctx: BuildContext): EChartsOption {
       axisLine: axisLineStyle(mode),
       axisTick: { show: false },
       splitLine: splitLineStyle(style.showGrid !== false, mode),
-      axisLabel: { ...baseTextStyle(mode), color: palette.textMuted, formatter: axisValueFormatter('decimal') },
+      axisLabel: { ...numericTextStyle(mode), formatter: axisValueFormatter('decimal') },
       scale: true,
     },
     yAxis: {
@@ -670,7 +682,7 @@ function buildScatter(ctx: BuildContext): EChartsOption {
       axisLine: { show: false },
       axisTick: { show: false },
       splitLine: splitLineStyle(style.showGrid !== false, mode),
-      axisLabel: { ...baseTextStyle(mode), color: palette.textMuted, formatter: axisValueFormatter(valueFormat) },
+      axisLabel: { ...numericTextStyle(mode), formatter: axisValueFormatter(valueFormat) },
       scale: true,
     },
     series: series as EChartsOption['series'],
@@ -728,7 +740,7 @@ function buildHistogram(ctx: BuildContext): EChartsOption {
       axisLine: { show: false },
       axisTick: { show: false },
       splitLine: splitLineStyle(style.showGrid !== false, mode),
-      axisLabel: { ...baseTextStyle(mode), color: palette.textMuted, formatter: axisValueFormatter('integer') },
+      axisLabel: { ...numericTextStyle(mode), formatter: axisValueFormatter('integer') },
     },
     series: [
       {
@@ -811,7 +823,7 @@ function buildBoxPlot(ctx: BuildContext): EChartsOption {
       axisLine: { show: false },
       axisTick: { show: false },
       splitLine: splitLineStyle(style.showGrid !== false, mode),
-      axisLabel: { ...baseTextStyle(mode), color: palette.textMuted, formatter: axisValueFormatter(valueFormat) },
+      axisLabel: { ...numericTextStyle(mode), formatter: axisValueFormatter(valueFormat) },
       scale: true,
     },
     series: [

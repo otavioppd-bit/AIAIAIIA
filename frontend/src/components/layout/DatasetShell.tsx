@@ -1,30 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { forwardRef, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import {
-  ArrowLeft, BarChart3, Bot, Compass, FileText, LayoutGrid,
-  Menu, Palette, Sparkles, SprayCan, X,
-} from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { Logo } from './Logo';
 import { ThemePicker } from './ThemePicker';
 import { UserMenu } from './UserMenu';
-import { Badge } from '@/components/ui/Badge';
-import { IconButton } from '@/components/ui/Button';
+import { BackgroundField, type FieldVariant } from '@/components/background/BackgroundField';
 import { cn } from '@/lib/utils';
 import { formatInteger } from '@/lib/format';
 import type { DatasetDetail } from '@/types/api';
 
+/**
+ * Navigation is a line of labels, not a panel. A sidebar spends 224px of every
+ * screen on wayfinding the user needs for one second; the data gets that space
+ * back here.
+ */
 const NAV_ITEMS = [
-  { segment: 'overview', label: 'Overview', icon: LayoutGrid },
-  { segment: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { segment: 'explore', label: 'Explore', icon: Compass },
-  { segment: 'analyst', label: 'AI Analyst', icon: Bot },
-  { segment: 'quality', label: 'Data Quality', icon: SprayCan },
-  { segment: 'customize', label: 'Customize', icon: Palette },
-  { segment: 'reports', label: 'Reports', icon: FileText },
+  { segment: 'overview', label: 'Overview' },
+  { segment: 'analytics', label: 'Analytics' },
+  { segment: 'explore', label: 'Explore' },
+  { segment: 'analyst', label: 'AI Analyst' },
+  { segment: 'quality', label: 'Data Quality' },
+  { segment: 'customize', label: 'Customize' },
+  { segment: 'reports', label: 'Reports' },
 ] as const;
+
+/** Each screen sits on the field variant that matches what it is for. */
+const FIELD_BY_SEGMENT: Record<string, FieldVariant> = {
+  overview: 'dashboard',
+  analytics: 'dashboard',
+  explore: 'dashboard',
+  analyst: 'analyst',
+  quality: 'quality',
+  customize: 'dashboard',
+  reports: 'dashboard',
+};
 
 interface DatasetShellProps {
   dataset: DatasetDetail;
@@ -34,153 +46,123 @@ interface DatasetShellProps {
 
 export function DatasetShell({ dataset, children, actions }: DatasetShellProps) {
   const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  // Close the drawer whenever navigation happens.
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+  const navRef = useRef<HTMLUListElement>(null);
 
   const base = `/app/datasets/${dataset.id}`;
   const activeSegment =
     NAV_ITEMS.find((item) => pathname?.startsWith(`${base}/${item.segment}`))?.segment ?? 'overview';
 
-  const qualityTone =
-    dataset.quality_score >= 80 ? 'positive' : dataset.quality_score >= 60 ? 'warning' : 'negative';
+  // On a narrow viewport the rail scrolls; the current screen has to be in view.
+  useEffect(() => {
+    const active = navRef.current?.querySelector('[aria-current="page"]');
+    active?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [activeSegment]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas">
-      <header className="presentation-hide sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur-xl">
-        <div className="flex h-14 items-center gap-3 px-3 sm:px-5">
-          <IconButton
-            label="Abrir navegação"
-            size="sm"
-            className="lg:hidden"
-            onClick={() => setMobileOpen(true)}
-          >
-            <Menu className="h-4 w-4" />
-          </IconButton>
+    <div className="relative flex min-h-screen flex-col bg-canvas">
+      <BackgroundField variant={FIELD_BY_SEGMENT[activeSegment] ?? 'dashboard'} interactive={false} />
 
-          <Link href="/app" className="hidden shrink-0 sm:block">
+      <header className="presentation-hide sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur-xl">
+        <div className="flex h-14 items-center gap-4 px-4 sm:px-6">
+          <Link href="/app" className="shrink-0" aria-label="Voltar ao workspace">
             <Logo showText={false} />
           </Link>
 
-          <div className="mx-1 hidden h-5 w-px bg-line sm:block" aria-hidden />
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <Link
-                href="/app"
-                className="shrink-0 text-ink-subtle transition-colors hover:text-ink"
-                aria-label="Voltar ao workspace"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-              </Link>
-              <h1 className="truncate text-sm font-semibold tracking-[-0.01em]" title={dataset.name}>
+          <div className="flex min-w-0 shrink items-center gap-2">
+            <Link
+              href="/app"
+              className="shrink-0 text-ink-subtle transition-colors hover:text-ink"
+              aria-label="Voltar ao workspace"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </Link>
+            <div className="min-w-0">
+              <h1 className="truncate text-body-sm font-medium leading-tight" title={dataset.name}>
                 {dataset.name}
               </h1>
+              <p className="mono-label truncate text-[10px] leading-tight text-ink-subtle">
+                {formatInteger(dataset.row_count)} linhas · {dataset.column_count} colunas
+              </p>
             </div>
-            <p className="hidden truncate text-2xs text-ink-subtle sm:block">
-              {formatInteger(dataset.row_count)} registros · {dataset.column_count} colunas
-            </p>
           </div>
 
-          <Badge tone={qualityTone} className="hidden shrink-0 md:inline-flex">
-            Qualidade {dataset.quality_score}/100
-          </Badge>
+          {/* The rail sits inline once there is room, and drops to its own
+              scrollable row below when there is not. */}
+          <nav className="ml-auto hidden xl:block">
+            <NavRail ref={navRef} base={base} active={activeSegment} />
+          </nav>
 
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1 xl:ml-0">
+            <QualityMark score={dataset.quality_score} />
             {actions}
             <ThemePicker />
             <UserMenu />
           </div>
         </div>
+
+        <nav className="border-t border-line/70 px-4 pb-1 pt-1 sm:px-6 xl:hidden">
+          <NavRail ref={navRef} base={base} active={activeSegment} />
+        </nav>
       </header>
 
-      <div className="flex flex-1">
-        {/* Desktop sidebar */}
-        <nav className="presentation-hide sticky top-14 hidden h-[calc(100vh-3.5rem)] w-56 shrink-0 border-r border-line bg-surface/40 p-3 lg:block">
-          <SidebarLinks base={base} active={activeSegment} />
-          <DomainCard dataset={dataset} />
-        </nav>
-
-        {/* Mobile drawer */}
-        {mobileOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div
-              className="absolute inset-0 animate-fade-in bg-black/50 backdrop-blur-sm"
-              onClick={() => setMobileOpen(false)}
-              aria-hidden
-            />
-            <nav className="absolute left-0 top-0 h-full w-64 animate-fade-in border-r border-line bg-surface p-3">
-              <div className="mb-3 flex items-center justify-between">
-                <Logo />
-                <IconButton label="Fechar" size="sm" onClick={() => setMobileOpen(false)}>
-                  <X className="h-4 w-4" />
-                </IconButton>
-              </div>
-              <SidebarLinks base={base} active={activeSegment} />
-              <DomainCard dataset={dataset} />
-            </nav>
-          </div>
-        )}
-
-        <main id="conteudo" className="min-w-0 flex-1">
-          {children}
-        </main>
-      </div>
+      <main id="conteudo" className="relative z-10 min-w-0 flex-1">
+        {children}
+      </main>
     </div>
   );
 }
 
-function SidebarLinks({ base, active }: { base: string; active: string }) {
-  return (
-    <ul className="space-y-0.5">
-      {NAV_ITEMS.map((item) => {
-        const Icon = item.icon;
-        const isActive = item.segment === active;
-        return (
-          <li key={item.segment}>
-            <Link
-              href={`${base}/${item.segment}`}
-              aria-current={isActive ? 'page' : undefined}
-              className={cn(
-                'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-all duration-150',
-                isActive
-                  ? 'bg-primary-soft text-primary'
-                  : 'text-ink-muted hover:bg-surface-raised hover:text-ink',
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {item.label}
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
+const NavRail = forwardRef<HTMLUListElement, { base: string; active: string }>(
+  function NavRail({ base, active }, ref) {
+    return (
+      <ul
+        ref={ref}
+        className="scroll-fade flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {NAV_ITEMS.map((item) => {
+          const isActive = item.segment === active;
+          return (
+            <li key={item.segment} className="shrink-0">
+              <Link
+                href={`${base}/${item.segment}`}
+                aria-current={isActive ? 'page' : undefined}
+                className={cn(
+                  'relative block rounded-md px-3 py-1.5 text-body-sm transition-colors duration-150',
+                  isActive ? 'text-ink' : 'text-ink-subtle hover:text-ink',
+                )}
+              >
+                {item.label}
+                {/* The annotation pen marks where you are. */}
+                {isActive && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-x-3 -bottom-px h-px bg-primary"
+                  />
+                )}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  },
+);
 
-function DomainCard({ dataset }: { dataset: DatasetDetail }) {
-  const domain = dataset.analysis?.domain;
-  if (!domain || domain.key === 'generic') return null;
-
+/**
+ * Quality as a measured bar rather than a coloured badge: the score is ordinal,
+ * so it is encoded by length, and the reader is never asked to decode a hue.
+ */
+function QualityMark({ score }: { score: number }) {
   return (
-    <div className="mt-4 rounded-lg border border-line bg-surface-sunken p-3">
-      <p className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">
-        <Sparkles className="h-3 w-3" />
-        Contexto detectado
-      </p>
-      <p className="mt-1.5 text-[13px] font-medium text-ink">{domain.label}</p>
-      <p className="mt-1 text-xs leading-relaxed text-ink-subtle">{domain.description}</p>
-      {domain.candidates?.[0]?.matched_keywords?.length > 0 && (
-        <p className="mt-2 text-2xs leading-relaxed text-ink-subtle">
-          Identificado pelas colunas:{' '}
-          <span className="font-mono">
-            {domain.candidates[0].matched_keywords.slice(0, 4).join(', ')}
-          </span>
-        </p>
-      )}
+    <div className="mr-1 hidden items-center gap-2 md:flex" title={`Qualidade dos dados: ${score}/100`}>
+      <span className="mono-label text-[10px] text-ink-subtle">Qualidade</span>
+      <span className="relative h-1 w-12 overflow-hidden rounded-pill bg-line">
+        <span
+          className="absolute inset-y-0 left-0 bg-primary"
+          style={{ width: `${Math.max(0, Math.min(100, score))}%` }}
+        />
+      </span>
+      <span className="numeric text-caption tabular-nums text-ink">{score}</span>
     </div>
   );
 }

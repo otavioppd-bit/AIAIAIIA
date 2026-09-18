@@ -31,7 +31,10 @@ _DEFAULT_STYLE: dict[str, Any] = {
 
 # Accent rotation keeps a generated dashboard from looking monochrome without
 # assigning colour randomly.
-_ACCENT_CYCLE = ["primary", "violet", "teal", "amber", "rose", "sky"]
+# One pen for every single-series chart. Cycling a hue per widget made each
+# card look like it belonged to a different chart library; in this system
+# variety comes from the form a chart takes, never from tinting it differently.
+_DEFAULT_ACCENT = "primary"
 
 
 def _widget_id() -> str:
@@ -56,15 +59,13 @@ def build_dashboard_spec(
     for index, kpi in enumerate(kpis):
         widgets.append(_kpi_widget(kpi, index, cursor))
 
-    if narrative and narrative.get("summary"):
-        widgets.append(_narrative_widget(narrative, cursor))
-
+    # The narrative and the ranked insights are promoted to the page's hero
+    # band rather than repeated as widgets: stating the same finding twice on
+    # one screen is what made the old dashboard read as a wall of cards. The
+    # spec still carries the narrative payload, and the frontend still renders
+    # both widget types for dashboards saved before this change.
     for index, rec in enumerate(recommendations):
         widgets.append(_chart_widget(rec, index, cursor))
-
-    insights = analysis.get("insights", [])
-    if insights:
-        widgets.append(_insights_widget(insights, cursor))
 
     widgets.append(_table_widget(profile, cursor))
 
@@ -117,9 +118,9 @@ class _LayoutCursor:
             self._row_height = 0
 
 
-def _style(index: int, **overrides: Any) -> dict[str, Any]:
+def _style(**overrides: Any) -> dict[str, Any]:
     style = dict(_DEFAULT_STYLE)
-    style["accent"] = _ACCENT_CYCLE[index % len(_ACCENT_CYCLE)]
+    style["accent"] = _DEFAULT_ACCENT
     style.update(overrides)
     return style
 
@@ -147,7 +148,7 @@ def _kpi_widget(kpi: dict[str, Any], index: int, cursor: _LayoutCursor) -> dict[
                 "rationale": kpi.get("rationale", ""),
                 "icon": _kpi_icon(kpi),
             },
-            "style": _style(index, shadow="sm", showLegend=False, showGrid=False),
+            "style": _style(shadow="none", showLegend=False, showGrid=False),
         },
         "rationale": kpi.get("rationale", ""),
         "principle": "Indicador único → cartão de KPI",
@@ -166,31 +167,6 @@ def _kpi_icon(kpi: dict[str, Any]) -> str:
     return "trending-up"
 
 
-def _narrative_widget(narrative: dict[str, Any], cursor: _LayoutCursor) -> dict[str, Any]:
-    cursor.newline()
-    return {
-        "id": _widget_id(),
-        "type": "narrative",
-        "title": narrative.get("headline", "Resumo executivo"),
-        "subtitle": "",
-        "layout": cursor.place(12, 2),
-        "config": {
-            "chart_type": "narrative",
-            "encoding": {},
-            "narrative": {
-                "summary": narrative.get("summary", ""),
-                "sections": narrative.get("sections", []),
-                "watch_items": narrative.get("watch_items", []),
-                "source": narrative.get("source", "deterministic"),
-            },
-            "style": _style(0, shadow="none", border=True, showLegend=False, showGrid=False),
-        },
-        "rationale": "Síntese textual dos achados calculados sobre o conjunto de dados.",
-        "principle": "Narrativa → contexto antes dos números",
-        "locked": False,
-    }
-
-
 def _chart_widget(rec: dict[str, Any], index: int, cursor: _LayoutCursor) -> dict[str, Any]:
     size = rec.get("size") or {"w": 6, "h": 2}
     return {
@@ -203,31 +179,10 @@ def _chart_widget(rec: dict[str, Any], index: int, cursor: _LayoutCursor) -> dic
             "chart_type": rec["chart_type"],
             "encoding": rec["encoding"],
             "options": rec.get("options", {}),
-            "style": _style(index + 1),
+            "style": _style(),
         },
         "rationale": rec.get("rationale", ""),
         "principle": rec.get("principle", ""),
-        "locked": False,
-    }
-
-
-def _insights_widget(insights: list[dict[str, Any]], cursor: _LayoutCursor) -> dict[str, Any]:
-    cursor.newline()
-    return {
-        "id": _widget_id(),
-        "type": "insights",
-        "title": "Insights automáticos",
-        "subtitle": "Calculados a partir dos dados do arquivo",
-        "layout": cursor.place(12, 2),
-        "config": {
-            "chart_type": "insights",
-            "encoding": {},
-            "insights": insights[:8],
-            "style": _style(2, showLegend=False, showGrid=False),
-        },
-        "rationale": "Achados derivados de estatísticas descritivas, tendências, "
-        "correlações e verificações de qualidade.",
-        "principle": "Descobertas → lista priorizada",
         "locked": False,
     }
 
@@ -244,7 +199,7 @@ def _table_widget(profile: dict[str, Any], cursor: _LayoutCursor) -> dict[str, A
         "config": {
             "chart_type": "table",
             "encoding": {"columns": columns},
-            "style": _style(3, showLegend=False, showGrid=True),
+            "style": _style(showLegend=False, showGrid=True),
             "table": {"pageSize": 25, "virtualized": True},
         },
         "rationale": "Acesso aos registros individuais para verificar qualquer número "
@@ -297,5 +252,5 @@ def next_widget_id() -> str:
     return _widget_id()
 
 
-def default_widget_style(index: int = 0) -> dict[str, Any]:
-    return _style(index)
+def default_widget_style() -> dict[str, Any]:
+    return _style()

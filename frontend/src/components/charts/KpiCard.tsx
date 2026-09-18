@@ -1,84 +1,71 @@
 'use client';
 
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Database, Percent, TrendingUp, Wallet } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight } from 'lucide-react';
 import { formatDelta, formatFull, formatValue } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Kpi } from '@/types/api';
 
-const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  currency: Wallet,
-  percent: Percent,
-  database: Database,
-  'trending-up': TrendingUp,
-};
-
 /**
  * The hero-number form: when the story is one value, that value *is* the chart.
- * The delta carries an arrow and a text label, so direction never depends on
- * colour alone.
+ *
+ * Direction is carried by the arrow and the text, never by hue — a reader who
+ * cannot separate red from green loses nothing here, and the panel keeps the
+ * near-zero colourfulness the rest of the system holds to.
  */
 export function KpiCard({
   kpi,
-  accent = 'primary',
   compact = false,
   className,
 }: {
   kpi: Kpi & { icon?: string };
+  /** Accepted for spec compatibility; the blueprint KPI carries no accent fill. */
   accent?: string;
   compact?: boolean;
   className?: string;
 }) {
-  const Icon = ICONS[kpi.icon ?? ''] ?? TrendingUp;
   const delta = kpi.delta;
-
   const direction = delta?.direction ?? 'flat';
   const DeltaIcon =
     direction === 'up' ? ArrowUpRight : direction === 'down' ? ArrowDownRight : ArrowRight;
-  const deltaTone =
-    direction === 'up'
-      ? 'text-positive bg-positive/10'
-      : direction === 'down'
-        ? 'text-negative bg-negative/10'
-        : 'text-ink-muted bg-surface-sunken';
 
   return (
-    <div className={cn('flex h-full flex-col justify-between gap-3', compact ? 'p-4' : 'p-5', className)}>
-      <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 truncate text-[13px] font-medium text-ink-muted" title={kpi.label}>
+    <div
+      className={cn(
+        'flex h-full flex-col justify-between gap-4',
+        compact ? 'p-4' : 'px-5 py-4',
+        className,
+      )}
+    >
+      <div className="min-w-0">
+        <p className="mono-label truncate text-[10px] text-ink-subtle" title={kpi.label}>
           {kpi.label}
         </p>
-        <span
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
-          style={{
-            backgroundColor: `rgb(var(--color-${accent}) / 0.12)`,
-            color: `rgb(var(--color-${accent}))`,
-          }}
-          aria-hidden
-        >
-          <Icon className="h-3.5 w-3.5" />
-        </span>
+        <div className="rule-dashed mt-2 opacity-60" />
       </div>
 
       <div className="min-w-0">
         <p
-          className="truncate text-[28px] font-semibold leading-none tracking-[-0.03em] tabular-nums"
+          className="numeric truncate text-[34px] font-extrabold leading-none text-ink"
           title={formatFull(kpi.value, kpi.format === 'integer' ? 'decimal' : kpi.format)}
         >
           {formatValue(kpi.value, kpi.format, { compact: true })}
         </p>
 
         {delta && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span
               className={cn(
-                'inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-xs font-semibold tabular-nums',
-                deltaTone,
+                'numeric inline-flex items-center gap-1 text-caption font-semibold',
+                direction === 'flat' ? 'text-ink-subtle' : 'text-ink',
               )}
             >
-              <DeltaIcon className="h-3 w-3" aria-hidden />
+              <DeltaIcon className="h-3 w-3 text-primary" aria-hidden />
               {formatDelta(delta.value)}
             </span>
-            <span className="truncate text-xs text-ink-subtle" title={`${delta.current_period} vs ${delta.previous_period}`}>
+            <span
+              className="truncate text-caption text-ink-subtle"
+              title={`${delta.current_period} vs ${delta.previous_period}`}
+            >
               {delta.label}
             </span>
           </div>

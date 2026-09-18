@@ -6,6 +6,7 @@ import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import { DashboardGrid } from '@/components/dashboard/DashboardGrid';
 import { DashboardToolbar } from '@/components/dashboard/DashboardToolbar';
 import { FilterBar } from '@/components/dashboard/FilterBar';
+import { InsightHero } from '@/components/dashboard/InsightHero';
 import { PresentationMode } from '@/components/dashboard/PresentationMode';
 import { WidgetEditor } from '@/components/dashboard/WidgetEditor';
 import { Button } from '@/components/ui/Button';
@@ -55,6 +56,27 @@ export default function OverviewPage() {
   const filters = useMemo(() => buildFilterPayload(spec), [spec]);
   const columnProfiles = dataset?.profile.columns ?? [];
 
+  // The engine already ranked these; the hero simply refuses to bury the top one.
+  const insights = dataset?.analysis?.insights ?? [];
+  const headlineWidget = useMemo(
+    () =>
+      spec?.widgets.find((w) => w.type === 'kpi' && w.config?.kpi?.delta) ??
+      spec?.widgets.find((w) => w.type === 'kpi'),
+    [spec],
+  );
+  const headlineKpi = headlineWidget?.config?.kpi;
+
+  /*
+   * The hero already states the headline number at full size, so the grid drops
+   * that one card — the same figure twice on one screen reads as a layout that
+   * was generated rather than composed. In edit mode the widget comes back, or
+   * it would be impossible to move or delete.
+   */
+  const gridSpec = useMemo(() => {
+    if (!spec || editMode || !headlineWidget) return spec;
+    return { ...spec, widgets: spec.widgets.filter((w) => w.id !== headlineWidget.id) };
+  }, [spec, editMode, headlineWidget]);
+
   if (isLoading || !dataset) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -82,7 +104,7 @@ export default function OverviewPage() {
 
   const gridContent = (
     <DashboardGrid
-      spec={spec}
+      spec={gridSpec ?? spec}
       datasetId={dataset.id}
       filters={filters}
       columnProfiles={columnProfiles}
@@ -96,11 +118,14 @@ export default function OverviewPage() {
     <>
       <div className="flex">
         <div className="min-w-0 flex-1 p-4 sm:p-6">
-          <div className="presentation-hide mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div className="presentation-hide mb-6 flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="truncate text-xl font-semibold tracking-[-0.02em]">{spec.title}</h2>
+              <p className="eyebrow text-ink-subtle">Dashboard</p>
+              <h2 className="mt-1.5 truncate text-subheading font-semibold tracking-[-0.02em]">
+                {spec.title}
+              </h2>
               {spec.subtitle && (
-                <p className="mt-0.5 truncate text-[13px] text-ink-muted">{spec.subtitle}</p>
+                <p className="mt-1 truncate text-body-sm text-ink-subtle">{spec.subtitle}</p>
               )}
             </div>
             <DashboardToolbar
@@ -111,6 +136,13 @@ export default function OverviewPage() {
               gridElementId={GRID_ID}
             />
           </div>
+
+          <InsightHero
+            insights={insights}
+            headline={headlineKpi}
+            domain={dataset.analysis?.domain}
+            className="presentation-hide mb-6"
+          />
 
           <FilterBar
             filters={spec.filters}

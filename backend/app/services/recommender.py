@@ -107,6 +107,7 @@ def recommend(
     analysis: dict[str, Any],
     domain_info: dict[str, Any],
     max_charts: int = 14,
+    min_charts: int = 4,
 ) -> list[dict[str, Any]]:
     """Return the ranked, de-duplicated set of recommended visualisations."""
     buckets = _columns_by_role(profile)
@@ -129,6 +130,7 @@ def recommend(
     candidates += _composition_rules(analysis, metrics, dimensions)
     candidates += _correlation_rules(analysis, metrics)
     candidates += _distribution_rules(metrics)
+    candidates += _spread_by_group_rules(frame, metrics, dimensions)
     candidates += _geo_rules(analysis, metrics, dimensions, profile)
     candidates += _cross_dimension_rules(frame, metrics, dimensions)
     candidates += _funnel_rules(profile, metrics)
@@ -136,7 +138,51 @@ def recommend(
 
     candidates.sort(key=lambda c: c.score, reverse=True)
     selected = _deduplicate(candidates, max_charts)
+    if len(selected) < min_charts:
+        selected = _backfill(candidates, selected, min_charts)
     return [c.to_dict() for c in selected]
+
+
+def _backfill(
+    candidates: list[Recommendation],
+    selected: list[Recommendation],
+    min_charts: int,
+) -> list[Recommendation]:
+    """Top a thin dashboard back up to a readable floor.
+
+    Only candidates the rules already produced are used — deduplication drops
+    charts for being *repetitive*, not for being unjustified, so re-admitting
+    them costs variety rather than honesty. Nothing is invented to fill space:
+    a dataset with one column still ends up with one chart, because the
+    alternative would be a chart that means nothing.
+    """
+    chosen = list(selected)
+    taken = {id(c) for c in chosen}
+
+    def admit(cand: Recommendation) -> None:
+        chosen.append(cand)
+        taken.add(id(cand))
+
+    # A form the dashboard is not using yet reads as a new angle; a second copy
+    # of a form already on screen reads as padding even when the question
+    # differs. So unused chart types are offered first, and repeats only get a
+    # turn if the floor is still short afterwards.
+    for allow_repeat_types in (False, True):
+        for cand in candidates:
+            if len(chosen) >= min_charts:
+                return chosen
+            if id(cand) in taken:
+                continue
+            # An identical chart over identical columns is a duplicate in any
+            # reading, so that one rule always holds.
+            if any(
+                c.chart_type == cand.chart_type and c.encoding == cand.encoding for c in chosen
+            ):
+                continue
+            if not allow_repeat_types and any(c.chart_type == cand.chart_type for c in chosen):
+                continue
+            admit(cand)
+    return chosen
 
 
 def _deduplicate(candidates: list[Recommendation], max_charts: int) -> list[Recommendation]:
@@ -470,6 +516,53 @@ def _correlation_rules(
 
 
 # --- Rule: distribution ---------------------------------------------------
+
+def _spread_by_group_rules(
+    frame: pd.DataFrame,
+    metrics: list[dict[str, Any]],
+    dimensions: list[dict[str, Any]],
+) -> list[Recommendation]:
+    """Principle: a total says which group is biggest; it never says whether the
+    group is consistent. Quartiles per category answer a question no bar can —
+    a category can lead on total and still be the least reliable of the set."""
+    if not metrics or not dimensions:
+        return []
+
+    metric = metrics[0]
+    if (metric.get("stats") or {}).get("count", 0) < 24:
+        return []
+
+    candidates = [d for d in dimensions if 2 <= d["unique_count"] <= 12]
+    if not candidates:
+        return []
+    dim = candidates[0]
+
+    # Quartiles need enough values inside each box to mean anything.
+    try:
+        per_group = frame.groupby(dim["name"], observed=True)[metric["name"]].count()
+    except (KeyError, TypeError):
+        return []
+    if per_group.empty or int(per_group.min()) < 5:
+        return []
+
+    return [
+        Recommendation(
+            chart_type=BOX_PLOT,
+            title=f"{sem.humanize(metric['name'])} por {sem.humanize(dim['name']).lower()}",
+            subtitle=f"Quartis e atípicos · {dim['unique_count']} grupos",
+            encoding={"x": dim["name"], "y": metric["name"], "agg": "none"},
+            rationale=(
+                f"O total por “{dim['name']}” esconde o quanto “{metric['name']}” varia "
+                "dentro de cada grupo. O box plot põe mediana, quartis e valores atípicos "
+                "na mesma escala, mostrando qual grupo é consistente e qual apenas teve "
+                "alguns casos extremos puxando o total."
+            ),
+            principle="Comparar distribuições entre grupos → box plot agrupado",
+            score=0.6,
+            columns=[dim["name"], metric["name"]],
+        )
+    ]
+
 
 def _distribution_rules(metrics: list[dict[str, Any]]) -> list[Recommendation]:
     """Principle: the shape of a single variable → histogram; spread/outliers → box plot."""
