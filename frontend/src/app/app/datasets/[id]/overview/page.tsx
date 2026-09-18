@@ -12,6 +12,7 @@ import { WidgetEditor } from '@/components/dashboard/WidgetEditor';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDataset, usePrimaryDashboard } from '@/hooks/useDataset';
+import { useWidgetData } from '@/hooks/useWidgetData';
 import { buildFilterPayload, useDashboardStore } from '@/store/dashboardStore';
 import { cn } from '@/lib/utils';
 
@@ -63,10 +64,38 @@ export default function OverviewPage() {
    * can state it once at full size — filtering it here instead would leave the
    * row it came from short, because the grid packs by row.
    */
-  const headlineKpi =
+  const storedHeadline =
     spec?.headline_kpi ??
     spec?.widgets.find((w) => w.type === 'kpi' && w.config?.kpi?.delta)?.config?.kpi ??
     spec?.widgets.find((w) => w.type === 'kpi')?.config?.kpi;
+
+  /*
+   * The stored figure answers for the whole dataset. Once a filter narrows the
+   * dashboard it stops being true, and a headline that disagrees with the
+   * charts under it is worse than no headline — so it is recomputed, and the
+   * stored delta is dropped because it compares two periods of the unfiltered
+   * series.
+   */
+  const headlineLive = useWidgetData({
+    datasetId: params.id,
+    chartType: 'kpi',
+    encoding: { y: storedHeadline?.column ?? undefined, agg: storedHeadline?.agg ?? 'count' },
+    filters,
+    limit: 1,
+    enabled: Boolean(storedHeadline) && filters.length > 0,
+  });
+
+  const headlineKpi = useMemo(() => {
+    if (!storedHeadline || filters.length === 0) return storedHeadline;
+    const row = headlineLive.data?.rows?.[0];
+    if (!row) return { ...storedHeadline, delta: null };
+    const value = Number(Object.values(row)[0]);
+    return {
+      ...storedHeadline,
+      value: Number.isFinite(value) ? value : storedHeadline.value,
+      delta: null,
+    };
+  }, [storedHeadline, filters.length, headlineLive.data]);
 
   if (isLoading || !dataset) {
     return (

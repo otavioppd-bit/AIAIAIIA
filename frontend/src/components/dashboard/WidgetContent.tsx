@@ -5,8 +5,8 @@ import { Sparkles } from 'lucide-react';
 import { ChartRenderer } from '@/components/charts/ChartRenderer';
 import { DataTable } from '@/components/charts/DataTable';
 import { InsightCard } from '@/components/charts/InsightCard';
-import { KpiCard } from '@/components/charts/KpiCard';
-import { LazyDataOrb } from '@/components/three/LazyDataOrb';
+import { KpiWidget } from './KpiWidget';
+import { DataSceneWidget } from './DataSceneWidget';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
@@ -33,7 +33,12 @@ export function WidgetContent({
   switch (widget.type) {
     case 'kpi':
       return widget.config.kpi ? (
-        <KpiCard kpi={widget.config.kpi} accent={widget.config.style.accent} />
+        <KpiWidget
+          kpi={widget.config.kpi}
+          datasetId={datasetId}
+          filters={filters}
+          accent={widget.config.style.accent}
+        />
       ) : (
         <EmptyState compact title="KPI sem configuração" />
       );
@@ -90,10 +95,11 @@ export function WidgetContent({
 
     case 'scene3d':
       return (
-        <LazyDataOrb
-          className="h-full w-full"
-          recordCount={rowCount}
-          coherence={qualityScore / 100}
+        <DataSceneWidget
+          datasetId={datasetId}
+          filters={filters}
+          rowCount={rowCount}
+          qualityScore={qualityScore}
         />
       );
 

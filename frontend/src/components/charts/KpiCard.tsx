@@ -15,12 +15,15 @@ import type { Kpi } from '@/types/api';
 export function KpiCard({
   kpi,
   compact = false,
+  pending = false,
   className,
 }: {
   kpi: Kpi & { icon?: string };
   /** Accepted for spec compatibility; the blueprint KPI carries no accent fill. */
   accent?: string;
   compact?: boolean;
+  /** A recomputation is in flight; the figure shown is the previous one. */
+  pending?: boolean;
   className?: string;
 }) {
   const delta = kpi.delta;
@@ -46,7 +49,8 @@ export function KpiCard({
       <div className="min-w-0">
         <p
           className={cn(
-            'numeric font-extrabold leading-none text-ink',
+            'numeric font-extrabold leading-none text-ink transition-opacity duration-200',
+            pending && 'opacity-40',
             kpiValueSize(formatValue(kpi.value, kpi.format, { compact: true })),
           )}
           title={formatFull(kpi.value, kpi.format === 'integer' ? 'decimal' : kpi.format)}

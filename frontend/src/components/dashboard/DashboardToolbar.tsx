@@ -367,7 +367,7 @@ const WIDGET_KINDS: { kind: Widget['type']; label: string; description: string; 
   { kind: 'table', label: 'Tabela', description: 'Registros detalhados, virtualizados.', icon: <Sheet className="h-4 w-4" /> },
   { kind: 'text', label: 'Texto', description: 'Anotações e conclusões.', icon: <Type className="h-4 w-4" /> },
   { kind: 'image', label: 'Imagem', description: 'Logotipo ou captura externa.', icon: <ImageIcon className="h-4 w-4" /> },
-  { kind: 'scene3d', label: 'Objeto 3D', description: 'Volume de registros em WebGL.', icon: <Box className="h-4 w-4" /> },
+  { kind: 'scene3d', label: 'Objeto 3D', description: 'Treliça de dados que acompanha os filtros.', icon: <Box className="h-4 w-4" /> },
 ];
 
 function AddWidgetDialog({
