@@ -57,9 +57,18 @@ _DEFAULT_SIZE: dict[str, dict[str, int]] = {
     TREEMAP: {"w": 6, "h": 2},
     RADAR: {"w": 4, "h": 2},
     FUNNEL: {"w": 4, "h": 2},
-    MAP: {"w": 6, "h": 2},
+    # A map needs vertical room: Brazil is close to square, and at two rows
+    # the shape gets squeezed into a strip with empty margins either side.
+    MAP: {"w": 6, "h": 3},
     TABLE: {"w": 12, "h": 2},
 }
+
+
+# How much a form already on screen discounts the next chart of its kind.
+# Tuned so a genuinely stronger chart still wins, but a near-tie goes to variety.
+_VARIETY_PENALTY = 0.08
+# No single form appears more than this, however well it scores.
+_TYPE_CAP = 2
 
 
 @dataclass
@@ -186,12 +195,26 @@ def _backfill(
 
 
 def _deduplicate(candidates: list[Recommendation], max_charts: int) -> list[Recommendation]:
-    """Drop charts that would tell the same story twice."""
+    """Pick the strongest set of charts that still tells several stories.
+
+    Strict score order fills a dashboard with whatever form happened to win
+    most often — four bar charts in a row read as one idea repeated. So each
+    already-placed form makes the next of its kind slightly less attractive:
+    a clearly better chart still wins, but among near-equals the one bringing
+    a form the reader has not seen yet goes first.
+    """
+    remaining = list(candidates)
     selected: list[Recommendation] = []
     seen_signatures: set[tuple] = set()
     type_counts: dict[str, int] = {}
 
-    for cand in candidates:
+    while remaining and len(selected) < max_charts:
+        cand = max(
+            remaining,
+            key=lambda c: c.score - _VARIETY_PENALTY * type_counts.get(c.chart_type, 0),
+        )
+        remaining.remove(cand)
+
         enc = cand.encoding
         signature = (
             cand.chart_type,
@@ -214,21 +237,15 @@ def _deduplicate(candidates: list[Recommendation], max_charts: int) -> list[Reco
             if s.chart_type != MAP
         ):
             continue
-        # Cap repetition of any single chart type.
-        cap = 3 if cand.chart_type in {LINE, BAR, BAR_HORIZONTAL} else 2
-        if type_counts.get(cand.chart_type, 0) >= cap:
+        # A hard ceiling behind the soft preference: no form more than twice.
+        if type_counts.get(cand.chart_type, 0) >= _TYPE_CAP:
             continue
 
         seen_signatures.add(signature)
         type_counts[cand.chart_type] = type_counts.get(cand.chart_type, 0) + 1
         selected.append(cand)
-        if len(selected) >= max_charts:
-            break
+
     return selected
-
-
-# --- Rule: time series ----------------------------------------------------
-
 def _temporal_rules(
     analysis: dict[str, Any], metrics: list[dict[str, Any]], temporal: list[dict[str, Any]]
 ) -> list[Recommendation]:

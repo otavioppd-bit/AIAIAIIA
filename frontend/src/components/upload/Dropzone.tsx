@@ -164,27 +164,27 @@ export function Dropzone({ onSubmit, disabled, className }: DropzoneProps) {
         tabIndex={0}
         aria-label="Selecionar arquivo CSV"
         className={cn(
-          'flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 sm:p-12',
+          'group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden',
+          'rounded-xl px-6 py-16 text-center transition-colors duration-200 sm:py-20',
+          'border border-dashed',
           dragging
-            ? 'border-primary bg-primary-soft/50 scale-[1.01]'
-            : 'border-line bg-surface/50 hover:border-line-strong hover:bg-surface',
+            ? 'border-primary bg-primary/[0.06]'
+            : 'border-line-strong/60 bg-surface/40 hover:border-ink/40',
           disabled && 'pointer-events-none opacity-50',
         )}
       >
-        <span
-          className={cn(
-            'flex h-12 w-12 items-center justify-center rounded-xl border border-line bg-surface transition-transform duration-200',
-            dragging && 'scale-110 border-primary text-primary',
-          )}
-        >
-          <Upload className="h-5 w-5" />
-        </span>
-        <div>
-          <p className="text-sm font-medium">
-            {dragging ? 'Solte o arquivo aqui' : 'Arraste seu CSV ou clique para selecionar'}
+        <DropField active={dragging} />
+
+        <div className="relative z-10">
+          <p className="eyebrow text-primary">01 · Envie seus dados</p>
+          <p className="display mt-4 text-[26px] text-ink sm:text-[34px]">
+            {dragging ? 'Solte para começar' : 'Solte seu CSV aqui'}
           </p>
-          <p className="mt-1 text-xs text-ink-subtle">
-            .csv, .tsv ou .txt · até {formatBytes(MAX_BYTES)} · separadores , ; tab | detectados automaticamente
+          <p className="mt-3 text-body-sm text-ink-muted">
+            Ou clique para escolher um arquivo. A plataforma lê o resto sozinha.
+          </p>
+          <p className="mono-label mt-6 text-[10px] text-ink-subtle">
+            csv · tsv · txt — até {formatBytes(MAX_BYTES)} — separador detectado
           </p>
         </div>
       </div>
@@ -205,5 +205,42 @@ export function Dropzone({ onSubmit, disabled, className }: DropzoneProps) {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * The drop target as a data field: ruled floor, converging lines and a few
+ * nodes waiting to be filled. It reacts to the drag rather than animating on
+ * its own, so an idle page stays still.
+ */
+function DropField({ active }: { active: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 600 260"
+      preserveAspectRatio="xMidYMid slice"
+      className={cn(
+        'pointer-events-none absolute inset-0 h-full w-full transition-opacity duration-300',
+        active ? 'opacity-90 text-primary' : 'opacity-40 text-primary group-hover:opacity-60',
+      )}
+    >
+      {/* Lines converging on the centre, where the file lands. */}
+      <g stroke="currentColor" strokeWidth="0.5" opacity="0.5">
+        {Array.from({ length: 13 }, (_, i) => {
+          const x = (i / 12) * 600;
+          return <line key={i} x1={x} y1={260} x2={300} y2={96} />;
+        })}
+      </g>
+      <g stroke="currentColor" strokeWidth="0.5" opacity="0.28">
+        {[170, 196, 222, 248].map((y) => (
+          <line key={y} x1={0} y1={y} x2={600} y2={y} />
+        ))}
+      </g>
+      <g fill="currentColor">
+        {[[92, 58], [168, 34], [430, 42], [520, 70], [268, 26], [352, 60]].map(([x, y], i) => (
+          <circle key={i} cx={x} cy={y} r={active ? 2 : 1.4} opacity={0.5} />
+        ))}
+      </g>
+    </svg>
   );
 }
