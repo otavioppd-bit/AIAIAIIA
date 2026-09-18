@@ -45,7 +45,10 @@ export function KpiCard({
 
       <div className="min-w-0">
         <p
-          className="numeric truncate text-[34px] font-extrabold leading-none text-ink"
+          className={cn(
+            'numeric font-extrabold leading-none text-ink',
+            kpiValueSize(formatValue(kpi.value, kpi.format, { compact: true })),
+          )}
           title={formatFull(kpi.value, kpi.format === 'integer' ? 'decimal' : kpi.format)}
         >
           {formatValue(kpi.value, kpi.format, { compact: true })}
@@ -73,4 +76,16 @@ export function KpiCard({
       </div>
     </div>
   );
+}
+
+/**
+ * A clipped figure is worse than a small one: "R$ 728.5…" is not a number the
+ * reader can act on. So a long value steps down through the scale instead of
+ * meeting an ellipsis, and the card never truncates what it exists to show.
+ */
+function kpiValueSize(text: string): string {
+  if (text.length > 14) return 'text-[22px]';
+  if (text.length > 11) return 'text-[26px]';
+  if (text.length > 8) return 'text-[30px]';
+  return 'text-[34px]';
 }

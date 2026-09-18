@@ -60,7 +60,10 @@ export function InsightHero({ insights, headline, domain, className }: InsightHe
           <div className="min-w-0 border-t border-dashed border-line-strong/50 pt-6 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
             <p className="mono-label text-[10px] text-ink-subtle">{headline.label}</p>
             <p
-              className="numeric mt-3 truncate text-[40px] font-extrabold leading-none sm:text-[52px]"
+              className={cn(
+                'numeric mt-3 font-extrabold leading-none',
+                heroValueSize(formatValue(headline.value, headline.format, { compact: true })),
+              )}
               title={formatFull(headline.value, headline.format === 'integer' ? 'decimal' : headline.format)}
             >
               {formatValue(headline.value, headline.format, { compact: true })}
@@ -93,4 +96,11 @@ export function InsightHero({ insights, headline, domain, className }: InsightHe
       )}
     </section>
   );
+}
+
+/** Same rule as the KPI card: step the scale down rather than clip a figure. */
+function heroValueSize(text: string): string {
+  if (text.length > 14) return 'text-[30px] sm:text-[36px]';
+  if (text.length > 11) return 'text-[34px] sm:text-[42px]';
+  return 'text-[40px] sm:text-[52px]';
 }
