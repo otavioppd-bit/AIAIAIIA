@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowUp, Bot, CircleSlash, Info, Loader2, Plus, User,
+  ArrowUp, Bot, CircleSlash, Info, Loader2, Plus, RotateCcw, User,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EChart } from '@/components/charts/EChart';
@@ -101,17 +101,18 @@ export function ChatPanel({
       setMessages((current) => [...current, response.message]);
       void queryClient.invalidateQueries({ queryKey: ['conversations', datasetId] });
     },
-    onError: (error) => {
+    onError: (error, question) => {
       const message =
         error instanceof ApiError ? error.message : 'Não foi possível processar a pergunta.';
-      toast.error(message);
       setMessages((current) => [
         ...current,
         {
           id: `error-${Date.now()}`,
           role: 'assistant',
           content: message,
-          payload: { intent: 'error' },
+          // The question is carried on the failure so it can be sent again
+          // without the user having to retype what they already asked.
+          payload: { intent: 'error', question },
           created_at: new Date().toISOString(),
         },
       ]);
@@ -221,6 +222,7 @@ export function ChatPanel({
             columnProfiles={columnProfiles}
             onAskFollowUp={(question) => ask.mutate(question)}
             onAddChart={onAddChartToDashboard}
+            onRetry={(question) => ask.mutate(question)}
           />
         ))}
 
@@ -271,11 +273,14 @@ function MessageBubble({
   columnProfiles,
   onAskFollowUp,
   onAddChart,
+  onRetry,
 }: {
   message: ChatMessage;
   columnProfiles: ColumnProfile[];
   onAskFollowUp: (question: string) => void;
   onAddChart?: (chart: AnalystChart) => void;
+  /** Re-sends a question that failed, without making the user retype it. */
+  onRetry?: (question: string) => void;
 }) {
   const { mode } = useTheme();
   const isUser = message.role === 'user';
@@ -322,6 +327,8 @@ function MessageBubble({
   }
 
   const isError = message.payload?.intent === 'error';
+  const failedQuestion =
+    isError && typeof message.payload?.question === 'string' ? message.payload.question : null;
 
   return (
     <div className="flex items-start gap-2">
@@ -361,6 +368,18 @@ function MessageBubble({
                 )}
               </div>
             </div>
+          )}
+
+          {failedQuestion && onRetry && (
+            <Button
+              size="xs"
+              variant="secondary"
+              className="mt-3"
+              icon={<RotateCcw className="h-3 w-3" />}
+              onClick={() => onRetry(failedQuestion)}
+            >
+              Tentar novamente
+            </Button>
           )}
 
           {source && !isError && (

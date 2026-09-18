@@ -50,6 +50,8 @@ class AnalystPlan(BaseModel):
     ) = None
     chart_title: str | None = Field(default=None, max_length=120)
     reasoning: str = Field(default="", max_length=600)
+    """Question terms that matched nothing in the dataset, for `unsupported`."""
+    unmatched_terms: list[str] = Field(default_factory=list, max_length=12)
 
     @field_validator("group_by", "metrics", "filters", mode="before")
     @classmethod

@@ -477,6 +477,8 @@ export interface ChatMessage {
     follow_ups?: string[];
     source?: string;
     notes?: string[];
+    /** Set on a local failure bubble, so the question can be sent again. */
+    question?: string;
   } | null;
   created_at: string;
 }

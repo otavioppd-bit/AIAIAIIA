@@ -88,10 +88,12 @@ class DataAnalyst:
             return self._answer_from_analysis(plan, profile, analysis, plan_source)
 
         if plan.intent == "unsupported":
+            missing = ", ".join(f"“{term}”" for term in plan.unmatched_terms[:3])
             return AnalystAnswer(
                 answer=(
-                    "Não consigo responder a essa pergunta com as colunas disponíveis "
-                    f"neste conjunto de dados. As colunas são: {', '.join(guard.names[:15])}"
+                    (f"Não encontrei {missing} neste conjunto de dados. " if missing else "")
+                    + "Responder assim mesmo significaria trocar a sua pergunta por outra. "
+                    f"As colunas disponíveis são: {', '.join(guard.names[:15])}"
                     + ("…" if len(guard.names) > 15 else "")
                     + "."
                 ),

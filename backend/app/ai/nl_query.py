@@ -123,6 +123,38 @@ _STOPWORDS = {
 }
 
 
+# Words that carry no subject of their own: they shape the question rather than
+# name anything in the data. What survives their removal is what the user is
+# actually asking *about*.
+_FUNCTIONAL_WORDS = {
+    "temos", "tenho", "tem", "houve", "teve", "existe", "existem", "ha",
+    "dados", "dado", "registro", "registros", "valores", "valor", "coluna",
+    "colunas", "linha", "linhas", "tabela", "conjunto", "base", "arquivo",
+    "csv", "grafico", "gráfico", "analise", "análise", "me", "diga", "fale",
+    "sobre", "acima", "abaixo", "cada", "todos", "todas", "geral", "melhor",
+    "pior", "maior", "menor", "ultimo", "último", "primeiro", "anos", "ano",
+    "mes", "mês", "meses", "dia", "dias", "semana", "semanas", "periodo",
+    "período", "trimestre", "trimestres", "data", "datas", "tempo",
+    "longo", "ao", "durante", "atraves", "através",
+}
+
+
+def _subject_words(question: str) -> set[str]:
+    """The words in a question that name something, stripped of the vocabulary
+    that only describes how to slice or aggregate it."""
+    words = _word_set(question) - _STOPWORDS - _FUNCTIONAL_WORDS
+    for lexicon in (
+        _SUPERLATIVE_MAX, _SUPERLATIVE_MIN, _AVG_WORDS, _SUM_WORDS, _COUNT_WORDS,
+        _MEDIAN_WORDS, _TREND_WORDS, _CORRELATION_WORDS, _OUTLIER_WORDS,
+        _QUALITY_WORDS, _OVERVIEW_WORDS, _DISTRIBUTION_WORDS, _COMPARE_WORDS,
+        _TIME_GRAIN_WORDS,
+    ):
+        # Some lexicons map a word to a meaning rather than being a bare set.
+        words -= set(lexicon)
+    # Single letters and bare numbers name nothing.
+    return {w for w in words if len(w) > 2 and not w.isdigit()}
+
+
 def _normalize(text: str) -> str:
     lowered = str(text).lower().strip()
     stripped = unicodedata.normalize("NFKD", lowered).encode("ascii", "ignore").decode()
@@ -300,6 +332,41 @@ def parse_question(
             intent="overview", limit=1, chart_type="none",
             reasoning="A pergunta pede um panorama geral do conjunto de dados.",
         )
+
+    # --- Is the question even about this dataset? -------------------------
+    #
+    # Falling back to the headline metric is right when the question names no
+    # subject at all ("qual o total?"). It is a lie when the question names a
+    # subject the data does not have: asking for profit margin and receiving
+    # revenue, labelled revenue, still answers a question nobody asked. So a
+    # question whose every subject word is unknown is refused instead.
+    #
+    # A question that carries a clear analytical intent — "how did it evolve",
+    # "compare these", "what is the distribution" — is asking about the usual
+    # measure by construction, so it does not have to name a column. Only a
+    # question with no intent *and* no recognisable subject is refused.
+    has_intent_signal = bool(
+        words & _TREND_WORDS or words & _COMPARE_WORDS or words & _DISTRIBUTION_WORDS
+    )
+    subjects = _subject_words(question)
+    if subjects and not has_intent_signal:
+        # Matched against the subjects alone: the full question still contains
+        # words like "valor" that name an aggregation here and a column
+        # elsewhere, and anchoring on those would accept any question at all.
+        subject_text = " ".join(sorted(subjects))
+        anchored = bool(matcher.find(subject_text, limit=1)) or bool(
+            matcher.find_by_value(subject_text)
+        )
+        if not anchored:
+            plan = AnalystPlan(
+                intent="unsupported", limit=1, chart_type="none",
+                reasoning=(
+                    "Nenhum termo da pergunta corresponde a uma coluna ou a um valor "
+                    "deste conjunto de dados."
+                ),
+            )
+            plan.unmatched_terms = sorted(subjects)
+            return plan
 
     # --- Metric selection -------------------------------------------------
     metric_matches = matcher.find(question, roles={sem.METRIC}, limit=1)

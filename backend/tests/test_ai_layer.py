@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from app.ai.analyst import DataAnalyst
@@ -239,3 +241,73 @@ async def test_null_provider_is_fully_functional(bundle):
     narrative = await analyst.summarise_dashboard(bundle.profile, bundle.analysis)
     assert narrative["summary"]
     assert narrative["source"] == "deterministic"
+
+
+# --- Refusing questions the data cannot answer ----------------------------
+
+def _sales_bundle():
+    rng = np.random.default_rng(7)
+    n = 400
+    frame = pd.DataFrame(
+        {
+            "data_venda": pd.to_datetime(rng.choice(pd.date_range("2024-01-01", "2024-12-31"), n)),
+            "uf": rng.choice(["SP", "RJ", "MG"], n),
+            "vendedor": rng.choice(["Ana", "Bruno"], n),
+            "categoria": rng.choice(["Moda", "Casa"], n),
+            "valor_total": rng.gamma(2, 500, n).round(2),
+        }
+    )
+    return analyse_csv_bytes(frame.to_csv(index=False).encode("utf-8"))
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "qual a margem de lucro por trimestre?",
+        "quantos funcionários temos?",
+        "qual o CPF do cliente mais antigo?",
+        "qual o NPS médio?",
+        "qual o estoque de parafusos?",
+        "xxxxx",
+    ],
+)
+@pytest.mark.asyncio
+async def test_a_question_about_absent_data_is_refused(question):
+    """The chat promises that a number which is not in the data is reported as
+    missing rather than estimated. The rules parser used to substitute the
+    domain's headline metric instead, so asking for profit margin returned
+    revenue — an answer to a question nobody asked."""
+    bundle = _sales_bundle()
+    answer = await DataAnalyst().answer(
+        question, bundle.frame, bundle.profile, bundle.analysis
+    )
+    result = answer.to_dict()
+    assert result["intent"] == "unsupported", result["answer"]
+    # It says what is missing and what the dataset does hold.
+    assert "não encontrei" in result["answer"].lower()
+    assert "valor_total" in result["answer"]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Qual uf teve maior valor total?",
+        "qual o total?",
+        "qual a evolução ao longo do tempo?",
+        "qual o ticket médio por vendedor?",
+        "valor total por categoria",
+        "compare as categorias",
+        "qual a distribuição dos valores?",
+        "quais valores fora do padrão?",
+        "me dê um panorama",
+    ],
+)
+@pytest.mark.asyncio
+async def test_answerable_questions_are_still_answered(question):
+    """The refusal must not swallow ordinary questions: one that names no
+    column but carries a clear intent is asking about the usual measure."""
+    bundle = _sales_bundle()
+    answer = await DataAnalyst().answer(
+        question, bundle.frame, bundle.profile, bundle.analysis
+    )
+    assert answer.to_dict()["intent"] != "unsupported", question
