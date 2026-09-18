@@ -389,6 +389,28 @@
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 26%, #000 72%, transparent 100%);
   }
 
+  /*
+   * A dashboard cell. The span is chosen per breakpoint rather than scaled
+   * down, so a phone gets one readable card per row instead of twelve columns
+   * of slivers. Done in CSS so there is no media query in JavaScript to hydrate
+   * against and no layout shift on first paint.
+   */
+  .widget-cell {
+    grid-column: span 12 / span 12;
+    height: var(--cell-height-mobile);
+  }
+  @media (min-width: 768px) {
+    .widget-cell {
+      grid-column: span var(--span-tablet) / span var(--span-tablet);
+      height: var(--cell-height);
+    }
+  }
+  @media (min-width: 1280px) {
+    .widget-cell {
+      grid-column: span var(--span-desktop) / span var(--span-desktop);
+    }
+  }
+
   .skeleton {
     @apply relative overflow-hidden bg-surface-sunken;
   }

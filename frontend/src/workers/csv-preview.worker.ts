@@ -63,18 +63,35 @@ self.onmessage = async (event: MessageEvent<CsvPreviewRequest>) => {
       return;
     }
 
+    // A header with nothing under it parses cleanly and then fails on the
+    // server, so it is caught here — before the user waits for an upload that
+    // was never going to work.
+    const dataRows = rows.filter((row) => row.some((cell) => String(cell ?? '').trim() !== ''));
+    if (dataRows.length === 0) {
+      post({
+        ok: false,
+        error: 'O arquivo tem cabeçalho mas nenhuma linha de dados.',
+        columns: header.map((value, index) => String(value ?? `coluna_${index + 1}`).trim()),
+        rows: [],
+        delimiter: parsed.meta.delimiter ?? ',',
+        estimatedRows: 0,
+        sizeBytes: file.size,
+      });
+      return;
+    }
+
     // Estimate total rows from the average line length in the sampled head.
     const sampledLines = text.split('\n').length;
     const bytesPerLine = slice.size / Math.max(sampledLines, 1);
     const estimatedRows = Math.max(
-      rows.length,
+      dataRows.length,
       Math.round(file.size / Math.max(bytesPerLine, 1)) - 1,
     );
 
     post({
       ok: true,
       columns: header.map((value, index) => String(value ?? `coluna_${index + 1}`).trim()),
-      rows: rows.slice(0, maxRows).map((row) => row.map((cell) => String(cell ?? ''))),
+      rows: dataRows.slice(0, maxRows).map((row) => row.map((cell) => String(cell ?? ''))),
       delimiter: parsed.meta.delimiter ?? ',',
       estimatedRows,
       sizeBytes: file.size,

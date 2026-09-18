@@ -48,6 +48,9 @@ function WorkspaceContent() {
   // Identifies this upload to the server's progress endpoint, so the stages
   // shown are the ones the pipeline actually reached.
   const [progressToken, setProgressToken] = useState('');
+  // A toast disappears; a failed upload should not. The reason stays on screen
+  // until the user acts on it.
+  const [uploadError, setUploadError] = useState('');
   const [pendingDelete, setPendingDelete] = useState<DatasetSummary | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(
     searchParams.get('onboarding') === '1' && !user?.onboarding_completed,
@@ -60,6 +63,7 @@ function WorkspaceContent() {
     mutationFn: async (file: File) => {
       const token = createId();
       setProgressToken(token);
+      setUploadError('');
       setUploadPercent(0);
       setProcessing(false);
       return api.datasets.upload(
@@ -84,9 +88,11 @@ function WorkspaceContent() {
     onError: (error) => {
       setProcessing(false);
       setUploadPercent(0);
-      const message =
-        error instanceof ApiError ? error.message : 'Não foi possível processar o arquivo.';
-      toast.error(message);
+      setUploadError(
+        error instanceof ApiError
+          ? error.message
+          : 'Não foi possível processar o arquivo. Verifique a conexão e tente novamente.',
+      );
     },
   });
 
@@ -145,7 +151,20 @@ function WorkspaceContent() {
         )}
 
         <section className="mt-8 animate-fade-up" aria-label="Enviar novo conjunto de dados">
-          {isUploading ? (
+          {uploadError ? (
+            <Card className="px-6 py-14 sm:py-16">
+              <EmptyState
+                icon={<AlertCircle className="h-5 w-5 text-negative" />}
+                title="Não conseguimos analisar este arquivo"
+                description={uploadError}
+                action={
+                  <Button size="sm" onClick={() => setUploadError('')}>
+                    Tentar outro arquivo
+                  </Button>
+                }
+              />
+            </Card>
+          ) : isUploading ? (
             <Card className="flex flex-col items-center justify-center px-6 py-14 sm:py-20">
               <AnalysisProgress
                 uploadPercent={uploadPercent}

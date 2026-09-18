@@ -56,6 +56,20 @@ export function WidgetShell({
   const span = Math.min(Math.max(widget.layout.w, 1), columns);
   const height = widget.layout.h * rowHeight;
 
+  /*
+   * The twelve-column composition is a desktop idea. Held at every width it
+   * squeezes a chart into 155px on a phone — the layout has to reorganise, not
+   * shrink. So each card carries three spans and CSS picks one per breakpoint:
+   * full width on a phone, halves and wides going full on a tablet, the
+   * designed composition only where there is room for it.
+   */
+  // Between a phone and a wide screen, two columns is the most a chart stays
+  // readable in: anything wider than a half goes full, anything narrower is
+  // promoted to a half rather than shrunk into a sliver.
+  const tabletSpan = span > columns / 2 ? columns : Math.ceil(columns / 2);
+  // A card is never shorter on a phone than it is wide-screen readable.
+  const mobileHeight = Math.max(height, widget.type === 'kpi' ? 132 : 264);
+
   const hasHeader = widget.type !== 'kpi';
 
   return (
@@ -64,16 +78,18 @@ export function WidgetShell({
       style={{
         transform: CSS.Translate.toString(transform),
         transition,
-        gridColumn: `span ${span} / span ${span}`,
         // A definite height is what makes the grid a grid: content scrolls
         // inside its card instead of stretching the page.
-        height,
+        ['--span-desktop' as string]: span,
+        ['--span-tablet' as string]: tabletSpan,
+        ['--cell-height' as string]: `${height}px`,
+        ['--cell-height-mobile' as string]: `${mobileHeight}px`,
         zIndex: isDragging ? 40 : undefined,
       }}
       data-widget-type={widget.type}
       data-widget-id={widget.id}
       className={cn(
-        'group/widget relative flex flex-col overflow-hidden transition-[border-color,box-shadow] duration-200',
+        'widget-cell group/widget relative flex flex-col overflow-hidden transition-[border-color,box-shadow] duration-200',
         style.border && 'border border-line',
         RADII[style.radius] ?? 'rounded-lg',
         SHADOWS[style.shadow] ?? 'shadow-sm',

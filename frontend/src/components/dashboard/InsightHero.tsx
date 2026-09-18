@@ -35,7 +35,7 @@ export function InsightHero({ insights, headline, domain, className }: InsightHe
       className={cn('relative border-y border-line/80 py-8 sm:py-10', className)}
       aria-label="Principal descoberta"
     >
-      <div className="grid gap-8 lg:grid-cols-[1.35fr_0.65fr] lg:gap-12">
+      <div className="grid gap-8 xl:grid-cols-[1.3fr_0.7fr] xl:gap-12">
         <div className="min-w-0">
           <p className="eyebrow text-primary">
             {domain?.label ? `Análise · ${domain.label}` : 'Principal descoberta'}
@@ -57,7 +57,7 @@ export function InsightHero({ insights, headline, domain, className }: InsightHe
         </div>
 
         {headline && (
-          <div className="min-w-0 border-t border-dashed border-line-strong/50 pt-6 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
+          <div className="min-w-0 border-t border-dashed border-line-strong/50 pt-6 xl:border-l xl:border-t-0 xl:pl-10 xl:pt-0">
             <p className="mono-label text-[10px] text-ink-subtle">{headline.label}</p>
             <p
               className={cn(
@@ -98,9 +98,15 @@ export function InsightHero({ insights, headline, domain, className }: InsightHe
   );
 }
 
-/** Same rule as the KPI card: step the scale down rather than clip a figure. */
+/**
+ * Same rule as the KPI card: step the scale down rather than clip a figure.
+ *
+ * The two-column split only starts at xl for the same reason — below it the
+ * right column is too narrow for a long currency figure, and a number that
+ * overflows its box pushes the whole page into a horizontal scroll.
+ */
 function heroValueSize(text: string): string {
-  if (text.length > 14) return 'text-[30px] sm:text-[36px]';
-  if (text.length > 11) return 'text-[34px] sm:text-[42px]';
-  return 'text-[40px] sm:text-[52px]';
+  if (text.length > 14) return 'text-[28px] sm:text-[34px] xl:text-[36px]';
+  if (text.length > 11) return 'text-[32px] sm:text-[40px] xl:text-[42px]';
+  return 'text-[36px] sm:text-[46px] xl:text-[52px]';
 }
