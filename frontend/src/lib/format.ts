@@ -136,6 +136,37 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   return new Intl.DateTimeFormat(LOCALE, { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
+/**
+ * A raw cell value as a reader should see it.
+ *
+ * The table used to print whatever the API sent, so a date column showed
+ * "2025-08-27T00:00:00" and a boolean showed "true" — machine values in a
+ * document meant for a person. Numbers keep going through `formatValue`, which
+ * knows about currency and percentages.
+ */
+export function formatCellValue(value: unknown, semanticType?: string): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
+  if (typeof value === 'number') return formatValue(value, 'auto', { semanticType: semanticType as never });
+
+  const text = String(value);
+  if (semanticType === 'datetime' || semanticType === 'date') {
+    const date = new Date(text);
+    if (!Number.isNaN(date.getTime())) {
+      // Midnight almost always means the source carried a date, not an instant.
+      const midnight =
+        date.getHours() === 0 && date.getMinutes() === 0 && date.getSeconds() === 0;
+      return midnight ? formatDate(date) : formatDateTime(date);
+    }
+  }
+  if (semanticType === 'boolean') {
+    const lowered = text.toLowerCase();
+    if (lowered === 'true') return 'Sim';
+    if (lowered === 'false') return 'Não';
+  }
+  return text;
+}
+
 export function formatRelativeTime(value: string | Date | null | undefined): string {
   if (!value) return '—';
   const date = typeof value === 'string' ? new Date(value) : value;

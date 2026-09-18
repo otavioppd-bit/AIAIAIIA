@@ -122,7 +122,11 @@ def _cell(value: Any) -> Any:
         return None
     if isinstance(value, (np.integer,)):
         return int(value)
-    if isinstance(value, (np.floating,)):
+    # A plain `float` has to be listed alongside the numpy one: pandas' nullable
+    # Float64 hands back the Python type, which fell through to `str(value)`
+    # below — so every decimal reached the table as text and lost its currency
+    # and thousands formatting.
+    if isinstance(value, (np.floating, float)):
         return stats.safe_float(value)
     if isinstance(value, (np.bool_, bool)):
         return bool(value)

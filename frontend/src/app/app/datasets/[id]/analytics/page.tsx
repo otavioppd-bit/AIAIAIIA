@@ -335,11 +335,11 @@ function TrendCard({
           />
         </dl>
 
-        {trend.notes.length > 0 && (
-          <p className="mt-3 rounded-md bg-surface-sunken p-2.5 text-xs leading-relaxed text-ink-muted">
-            {trend.notes.join(' ')}
-          </p>
-        )}
+        {/*
+          The trimming note used to be repeated here. The chart above now
+          reports it itself — the query engine drops the same partial period the
+          trend statistics do — and one card should state a fact once.
+        */}
       </CardContent>
     </Card>
   );

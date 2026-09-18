@@ -52,7 +52,7 @@ cp .env.example .env                                  # works with zero keys fil
 
 uvicorn app.main:app --reload --port 8000              # dev server, http://localhost:8000/docs
 
-pytest -q                                               # full suite (83 tests)
+pytest -q                                               # full suite (120 tests)
 pytest tests/test_analysis.py -q                        # one file
 pytest tests/test_analysis.py::test_name -q              # one test
 ruff check app tests                                     # lint (config in pyproject.toml)
@@ -153,6 +153,27 @@ Everything flows through `app/services/analyzer.py::analyse_csv_bytes`, which ch
   the user watches are emitted by the analyser through `on_stage` as each phase
   begins, in execution order — insights genuinely run before chart selection.
   State is in-memory, TTL'd, and scoped to the user who claimed the token.
+- **The partial-period rule belongs to the query engine, not just the trend
+  engine.** `resample_series` has always dropped a boundary bucket the data only
+  partly covers, but charts read from `query_engine.execute`, which did not — so
+  the Analytics card drew a vertical collapse into a month with three days of
+  data while the caption underneath said that period had been excluded, and
+  every dashboard time series did the same. `statistics.partial_boundary_periods`
+  is now the shared rule and the engine applies it to any time-grain grouping,
+  emitting a note the chart shows. Never restore a "raw" time-grain path without
+  it: a chart and the statistics beside it have to describe one series.
+- **Raw column names and raw values are never shown to a reader.** Insight
+  prose said "valor_total cresceu 36,0%" under a title that said "Valor total";
+  quality issues named `preco_unitario`; the report printed `[MEDIUM]`; the data
+  table printed `2025-08-27T00:00:00` and `true`. Prose goes through
+  `sem.humanize` (backend) or `formatCellValue` (frontend) while `evidence`,
+  `columns` and filter payloads keep the raw names the engine needs.
+- **A number has to reach the frontend as a number.** `profiling._cell` matched
+  `np.floating` but not Python's `float`, and pandas' nullable `Float64` hands
+  back the latter — so every decimal in the row preview arrived as a string and
+  `formatCellValue` could only echo it: "595.34" where the column is money.
+  `query_engine._jsonable` already had the plain-`float` branch, which is why
+  charts formatted correctly and the table did not.
 - **Never truncate a figure.** A clipped "R$ 728.5…" is not a number anyone can
   act on; `KpiCard` and `InsightHero` step down the type scale instead.
 - **A KPI card has to fit its cell, not overflow it.** `.widget-cell` is a fixed
@@ -164,6 +185,14 @@ Everything flows through `app/services/analyzer.py::analyse_csv_bytes`, which ch
   three spans and CSS picks one per breakpoint (full width < 768, two columns to
   1279, the designed composition above). Holding twelve columns at 375px put a
   chart in a 155px sliver.
+
+## Known gaps
+
+- A boolean dimension still reads `True`/`False` in chart legends and axes.
+  Fixing it means relabelling at roughly a dozen `String(row[...])` sites in
+  `chart-options.ts` *and* in the `colorDomain` that seeds the categorical
+  scale from the same strings — relabel one without the other and every colour
+  shifts. Left alone deliberately rather than half-done.
 
 ## Testing conventions worth knowing
 

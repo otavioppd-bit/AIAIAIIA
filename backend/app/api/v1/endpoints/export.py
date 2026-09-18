@@ -63,6 +63,29 @@ def export_csv(
     )
 
 
+_AGG_LABELS: dict[str, str] = {
+    "sum": "soma",
+    "mean": "média",
+    "median": "mediana",
+    "count": "contagem",
+    "min": "mínimo",
+    "max": "máximo",
+}
+
+_DIRECTION_LABELS: dict[str, str] = {
+    "up": "alta",
+    "down": "queda",
+    "flat": "estável",
+}
+
+_SEVERITY_LABELS: dict[str, str] = {
+    "critical": "Crítico",
+    "high": "Alto",
+    "medium": "Médio",
+    "low": "Baixo",
+}
+
+
 def build_report_markdown(dataset) -> str:
     """Compose the insights report from computed analysis only."""
     profile = dataset.profile
@@ -87,13 +110,19 @@ def build_report_markdown(dataset) -> str:
         "",
     ]
 
+    insights = analysis.get("insights", [])
+    insight_titles = {str(item["title"]).strip() for item in insights}
+
     narrative = _primary_narrative(dataset)
     if narrative:
         lines += ["## Resumo executivo", "", narrative.get("summary", ""), ""]
         for section in narrative.get("sections", []):
+            # The narrative is composed from the same findings listed below, so
+            # printing both restated every anomaly twice, word for word.
+            if str(section["heading"]).strip() in insight_titles:
+                continue
             lines += [f"### {section['heading']}", "", section["body"], ""]
 
-    insights = analysis.get("insights", [])
     if insights:
         lines += ["## Principais achados", ""]
         for item in insights:
@@ -111,9 +140,10 @@ def build_report_markdown(dataset) -> str:
                 f"{trend['change_pct']:+.1f}%" if trend["change_pct"] is not None else "—"
             )
             lines.append(
-                f"| {sem.humanize(trend['metric_column'])} | {trend.get('agg', 'sum')} | "
+                f"| {sem.humanize(trend['metric_column'])} | "
+                f"{_AGG_LABELS.get(trend.get('agg', 'sum'), trend.get('agg', 'sum'))} | "
                 f"{trend['points'][0]['label']} – {trend['points'][-1]['label']} | "
-                f"{change} | {trend['direction']} |"
+                f"{change} | {_DIRECTION_LABELS.get(trend['direction'], trend['direction'])} |"
             )
         lines.append("")
 
@@ -132,7 +162,7 @@ def build_report_markdown(dataset) -> str:
         lines += ["## Qualidade dos dados", ""]
         for issue in quality["issues"]:
             lines += [
-                f"### [{issue['severity'].upper()}] {issue['title']}",
+                f"### {_SEVERITY_LABELS.get(issue['severity'], issue['severity'])} · {issue['title']}",
                 "",
                 issue["description"],
                 "",

@@ -147,7 +147,9 @@ def _score_completeness(
             title=f"{len(critical)} coluna(s) com mais de 50% de valores ausentes",
             description="Colunas majoritariamente vazias distorcem médias e podem "
             "gerar gráficos enganosos: "
-            + ", ".join(f"{c['name']} ({c['missing_ratio']:.0%})" for c in critical[:5]),
+            + ", ".join(
+                f"{sem.humanize(c['name'])} ({c['missing_ratio']:.0%})" for c in critical[:5]
+            ),
             recommendation="Remova essas colunas da análise ou obtenha os dados na origem "
             "antes de usá-las como métrica ou dimensão.",
             columns=[c["name"] for c in critical],
@@ -160,7 +162,9 @@ def _score_completeness(
             category="completude",
             title=f"{len(moderate)} coluna(s) com preenchimento parcial",
             description="Entre 15% e 50% dos valores estão ausentes em: "
-            + ", ".join(f"{c['name']} ({c['missing_ratio']:.0%})" for c in moderate[:5]),
+            + ", ".join(
+                f"{sem.humanize(c['name'])} ({c['missing_ratio']:.0%})" for c in moderate[:5]
+            ),
             recommendation="Defina uma política de imputação (média, mediana ou categoria "
             "'Não informado') ou filtre os registros incompletos.",
             columns=[c["name"] for c in moderate],
@@ -201,7 +205,7 @@ def _score_uniqueness(
             category="unicidade",
             title=f"{len(constants)} coluna(s) com valor único constante",
             description="Estas colunas têm sempre o mesmo valor e não agregam informação: "
-            + ", ".join(constants[:6]),
+            + ", ".join(sem.humanize(name) for name in constants[:6]),
             recommendation="Remova-as do dataset para simplificar a análise.",
             columns=constants,
             impact=len(constants) / max(len(columns), 1),
@@ -231,7 +235,7 @@ def _score_consistency(
             category="consistencia",
             title=f"{len(noisy)} coluna(s) categórica(s) com cardinalidade muito alta",
             description="Valores quase sempre distintos sugerem texto livre ou falta de "
-            "padronização em: " + ", ".join(c["name"] for c in noisy[:5]),
+            "padronização em: " + ", ".join(sem.humanize(c["name"]) for c in noisy[:5]),
             recommendation="Padronize os rótulos (maiúsculas/minúsculas, acentuação, "
             "espaços) ou trate a coluna como identificador em vez de dimensão.",
             columns=[c["name"] for c in noisy],
@@ -255,7 +259,7 @@ def _score_consistency(
             category="consistencia",
             title="Categorias que aparecem uma única vez",
             description="Possíveis erros de digitação ou variações do mesmo rótulo em: "
-            + ", ".join(c["name"] for c in typo_prone[:5]),
+            + ", ".join(sem.humanize(c["name"]) for c in typo_prone[:5]),
             recommendation="Revise os valores raros e agrupe variações equivalentes "
             "(ex.: 'SP' e 'São Paulo').",
             columns=[c["name"] for c in typo_prone],
@@ -283,7 +287,7 @@ def _score_validity(columns: list[dict[str, Any]], issues: list[dict[str, Any]])
             title=f"{len(heavy_outliers)} coluna(s) com muitos valores atípicos",
             description="Mais de 5% dos valores estão fora das cercas de Tukey em: "
             + ", ".join(
-                f"{c['name']} ({c['stats']['outliers']['ratio']:.1%})"
+                f"{sem.humanize(c['name'])} ({c['stats']['outliers']['ratio']:.1%})"
                 for c in heavy_outliers[:5]
             ),
             recommendation="Verifique erros de unidade ou digitação. Se forem legítimos, "
@@ -303,7 +307,8 @@ def _score_validity(columns: list[dict[str, Any]], issues: list[dict[str, Any]])
             title="Valores extremos detectados",
             description="Valores além de 3× o intervalo interquartil em: "
             + ", ".join(
-                f"{c['name']} ({c['stats']['outliers']['extreme_count']})" for c in extreme[:5]
+                f"{sem.humanize(c['name'])} ({c['stats']['outliers']['extreme_count']})"
+                for c in extreme[:5]
             ),
             recommendation="Inspecione esses registros individualmente — costumam ser "
             "erros de entrada (vírgula decimal, multiplicador errado).",
@@ -323,7 +328,7 @@ def _score_validity(columns: list[dict[str, Any]], issues: list[dict[str, Any]])
             category="validade",
             title="Valores monetários negativos",
             description="Encontramos valores negativos em colunas de valor: "
-            + ", ".join(c["name"] for c in negatives[:5]),
+            + ", ".join(sem.humanize(c["name"]) for c in negatives[:5]),
             recommendation="Confirme se representam estornos/devoluções. Se sim, separe-os "
             "em uma dimensão própria para não reduzir o faturamento bruto.",
             columns=[c["name"] for c in negatives],

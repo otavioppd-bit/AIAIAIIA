@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
-import { formatValue, humanize } from '@/lib/format';
+import { formatCellValue, humanize } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { ColumnProfile, DataRow } from '@/types/api';
 
@@ -165,12 +165,7 @@ export function DataTable({
                     const value = row[column];
                     const numeric =
                       profile && ['integer', 'float', 'currency', 'percentage'].includes(profile.semantic_type);
-                    const display =
-                      typeof value === 'number'
-                        ? formatValue(value, 'auto', { semanticType: profile?.semantic_type })
-                        : value === null || value === undefined
-                          ? '—'
-                          : String(value);
+                    const display = formatCellValue(value, profile?.semantic_type);
                     return (
                       <td
                         key={column}

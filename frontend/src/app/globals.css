@@ -440,6 +440,12 @@
     mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
     -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
   }
+
+  /* The same softened edge for a strip that scrolls sideways. */
+  .scroll-fade-x {
+    mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+  }
 }
 
 /* Presentation mode hides all chrome and fills the viewport. */

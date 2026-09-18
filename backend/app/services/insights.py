@@ -119,6 +119,7 @@ def _trend_insights(analysis: dict[str, Any], types: dict[str, str]) -> list[dic
         if change is None or trend["periods"] < 3:
             continue
         metric = trend["metric_column"]
+        metric_name = sem.humanize(metric)
         stype = types.get(metric, sem.FLOAT)
         grain_label = _GRAIN_LABELS.get(trend["grain"], "períodos")
         magnitude = min(1.0, abs(change) / 60.0)
@@ -136,13 +137,13 @@ def _trend_insights(analysis: dict[str, Any], types: dict[str, str]) -> list[dic
 
         if trend["direction"] == "flat":
             description = (
-                f"{metric} variou apenas {_pct(abs(change))} entre "
+                f"{metric_name} variou apenas {_pct(abs(change))} entre "
                 f"{trend['points'][0]['label']} e {trend['points'][-1]['label']}, "
                 f"mantendo-se em torno de {_fmt(trend['last_value'], stype)}."
             )
         else:
             description = (
-                f"{metric} {verb} {_pct(abs(change))} ao longo de "
+                f"{metric_name} {verb} {_pct(abs(change))} ao longo de "
                 f"{trend['periods']} {grain_label}, saindo de "
                 f"{_fmt(trend['first_value'], stype)} em {trend['points'][0]['label']} "
                 f"para {_fmt(trend['last_value'], stype)} em {trend['points'][-1]['label']}."
@@ -214,6 +215,7 @@ def _anomaly_insights(analysis: dict[str, Any], types: dict[str, str]) -> list[d
     out: list[dict[str, Any]] = []
     for anomaly in analysis.get("anomalies", []):
         metric = anomaly["metric_column"]
+        metric_name = sem.humanize(metric)
         stype = types.get(metric, sem.FLOAT)
         change = anomaly["change_pct"]
         out.append(
@@ -222,7 +224,7 @@ def _anomaly_insights(analysis: dict[str, Any], types: dict[str, str]) -> list[d
                 title=f"{anomaly['direction'].capitalize()} atípica de "
                 f"{_pct(abs(change))} em {anomaly['period']}",
                 description=(
-                    f"{metric} passou de {_fmt(anomaly['previous_value'], stype)} em "
+                    f"{metric_name} passou de {_fmt(anomaly['previous_value'], stype)} em "
                     f"{anomaly['previous_period']} para {_fmt(anomaly['value'], stype)} em "
                     f"{anomaly['period']}. A variação está a "
                     f"{abs(anomaly['z_score']):.1f} desvios-padrão da variação típica "
@@ -246,7 +248,10 @@ def _concentration_insights(analysis: dict[str, Any], types: dict[str, str]) -> 
         metric = breakdown.get("metric")
         stype = types.get(metric, sem.INTEGER if metric is None else sem.FLOAT)
         dimension = breakdown["dimension"]
-        metric_label = metric or "registros"
+        # Prose reads the column as a person would write it; `evidence` and
+        # `columns` keep the raw names the query engine needs.
+        metric_label = sem.humanize(metric) if metric else "registros"
+        dimension_label = sem.humanize(dimension)
         ratio = leader.get("ratio") or 0
 
         if ratio >= 0.35 and breakdown["distinct"] >= 3:
@@ -255,7 +260,7 @@ def _concentration_insights(analysis: dict[str, Any], types: dict[str, str]) -> 
                     kind=CONCENTRATION,
                     title=f"{leader['label']} concentra {_pct(ratio * 100)} de {metric_label}",
                     description=(
-                        f"Entre {breakdown['distinct']} valores de {dimension}, "
+                        f"Entre {breakdown['distinct']} valores de {dimension_label}, "
                         f"“{leader['label']}” responde por {_fmt(leader['value'], stype)} "
                         f"({_pct(ratio * 100)} do total de {_fmt(breakdown['total'], stype)}). "
                         "Alta dependência de um único segmento representa risco."
@@ -279,7 +284,7 @@ def _concentration_insights(analysis: dict[str, Any], types: dict[str, str]) -> 
                     kind=RANKING,
                     title=f"{leader['label']} lidera em {metric_label}",
                     description=(
-                        f"“{leader['label']}” é o maior valor de {dimension} com "
+                        f"“{leader['label']}” é o maior valor de {dimension_label} com "
                         f"{_fmt(leader['value'], stype)}. Os três primeiros somam "
                         f"{_pct(breakdown['top3_share'] * 100)} do total."
                     ),
@@ -302,7 +307,7 @@ def _concentration_insights(analysis: dict[str, Any], types: dict[str, str]) -> 
                     kind=COMPOSITION,
                     title=f"Efeito Pareto em {sem.humanize(dimension)}",
                     description=(
-                        f"20% dos valores de {dimension} concentram "
+                        f"20% dos valores de {dimension_label} concentram "
                         f"{_pct(breakdown['pareto_share'] * 100)} de {metric_label}. "
                         "Priorizar esse grupo tende a gerar o maior retorno."
                     ),

@@ -631,3 +631,94 @@ def test_an_english_column_name_is_not_read_as_portuguese_money():
     assert sem._matches("custos", sem._MONEY_WORDS)
     assert sem._matches("valorTotal", sem._MONEY_WORDS)
     assert sem._matches("precoUnitario", sem._MONEY_WORDS)
+
+
+def test_time_series_chart_drops_the_same_partial_period_the_trend_does():
+    """A chart and the trend statistics beside it must describe one series.
+
+    The trend engine has always dropped a boundary bucket the data only partly
+    covers. Charts read from the query engine instead, so for a long time the
+    Analytics card plotted a month-long collapse in a month with three days of data
+    while the caption underneath said that period had been excluded.
+    """
+    days = pd.date_range("2024-01-01", "2025-10-03", freq="D")
+    frame = pd.DataFrame(
+        {
+            "data_pedido": days,
+            "valor_total": np.full(len(days), 100.0),
+        }
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+
+    from app.services import query_engine as qe
+
+    guard = qe.SchemaGuard(bundle.profile["columns"])
+    plan = qe.QueryPlan(
+        group_by=["data_pedido"],
+        metrics=[qe.MetricSpec(column="valor_total", agg="sum")],
+        time_grain="month",
+        limit=500,
+    )
+    result = qe.execute(bundle.frame, plan, guard)
+
+    periods = [row["data_pedido"] for row in result.rows]
+    assert "2025-10" not in periods, "o mês de três dias seria desenhado como um colapso"
+    assert periods[-1] == "2025-09"
+    assert any("2025-10" in note for note in result.notes), "a exclusão precisa ser dita"
+
+    # And the trend agrees: same last period, same closing value.
+    trend = next(
+        t for t in bundle.analysis["trends"] if t["metric_column"] == "valor_total"
+    )
+    assert trend["points"][-1]["period"].startswith("2025-09")
+    assert result.rows[-1]["valor_total"] == pytest.approx(trend["last_value"])
+
+
+def test_a_complete_final_period_is_never_dropped():
+    """The rule is about coverage, not about being last: a month the data spans
+    in full stays in the series."""
+    days = pd.date_range("2024-01-01", "2024-06-30", freq="D")
+    frame = pd.DataFrame(
+        {"data_pedido": days, "valor_total": np.full(len(days), 50.0)}
+    )
+    bundle = analyse_csv_bytes(_csv(frame))
+
+    from app.services import query_engine as qe
+
+    guard = qe.SchemaGuard(bundle.profile["columns"])
+    plan = qe.QueryPlan(
+        group_by=["data_pedido"],
+        metrics=[qe.MetricSpec(column="valor_total", agg="sum")],
+        time_grain="month",
+        limit=500,
+    )
+    result = qe.execute(bundle.frame, plan, guard)
+
+    assert [row["data_pedido"] for row in result.rows][-1] == "2024-06"
+    assert result.notes == []
+
+
+def test_row_preview_keeps_decimals_as_numbers():
+    """The table can only format what arrives as a number.
+
+    `_cell` listed numpy's float but not Python's, and pandas' nullable Float64
+    hands back the latter — so every decimal reached the frontend as text and
+    a currency column rendered "595.34" instead of "R$ 595,34".
+    """
+    from app.services import profiling
+
+    frame = pd.DataFrame(
+        {
+            "valor_total": pd.array([595.34, 18356.44], dtype="Float64"),
+            "quantidade": pd.array([2, 3], dtype="Int64"),
+            "recorrente": pd.array([True, False], dtype="boolean"),
+            "pedido_id": ["PED-1", "PED-2"],
+        }
+    )
+    row = profiling.sample_rows(frame, limit=1)[0]
+
+    assert isinstance(row["valor_total"], float)
+    assert row["valor_total"] == pytest.approx(595.34)
+    assert isinstance(row["quantidade"], int)
+    assert isinstance(row["recorrente"], bool)
+    assert row["pedido_id"] == "PED-1"

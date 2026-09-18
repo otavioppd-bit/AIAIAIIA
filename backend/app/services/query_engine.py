@@ -167,6 +167,7 @@ def execute(frame: pd.DataFrame, plan: QueryPlan, guard: SchemaGuard) -> QueryRe
     # 2. Resolve grouping -------------------------------------------------
     group_columns: list[str] = []
     group_frames: dict[str, pd.Series] = {}
+    temporal_source: tuple[str, pd.Series] | None = None
     for raw in plan.group_by:
         column = guard.require(raw, what="coluna de agrupamento")
         if guard.is_temporal(column) and plan.time_grain:
@@ -174,6 +175,8 @@ def execute(frame: pd.DataFrame, plan: QueryPlan, guard: SchemaGuard) -> QueryRe
             label = f"{column}"
             group_frames[label] = bucketed
             group_columns.append(label)
+            if temporal_source is None:
+                temporal_source = (label, working[column])
         else:
             group_frames[column] = working[column].astype("string").fillna("(vazio)")
             group_columns.append(column)
@@ -231,6 +234,22 @@ def execute(frame: pd.DataFrame, plan: QueryPlan, guard: SchemaGuard) -> QueryRe
 
     grouped = assembled.groupby(group_columns, dropna=False, observed=True).agg(agg_spec)
     grouped = grouped.reset_index()
+
+    # 4b. Partial boundary periods ----------------------------------------
+    # A month the data only covers three days of sums to a fraction of a real
+    # one, and plotting it draws a collapse that never happened. The trend
+    # engine has always dropped those buckets; charts read from here, so the
+    # rule has to live here too or a chart contradicts the caption beside it.
+    if temporal_source is not None and plan.time_grain:
+        label_column, source = temporal_source
+        edges = stats.partial_boundary_periods(source, plan.time_grain)
+        if edges:
+            labels = set(_bucket_time(pd.Series(edges), plan.time_grain).dropna())
+            keep = ~grouped[label_column].isin(labels)
+            if int(keep.sum()) >= 3:
+                grouped = grouped[keep]
+                for label in sorted(labels):
+                    notes.append(f"Período {label} excluído por estar incompleto.")
 
     # 5. Sort --------------------------------------------------------------
     metric_outputs = [o for o, _, _ in resolved_metrics]

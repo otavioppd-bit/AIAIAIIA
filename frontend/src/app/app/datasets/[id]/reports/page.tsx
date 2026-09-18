@@ -11,7 +11,6 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import { downloadMarkdown } from '@/lib/export';
 import { useDataset } from '@/hooks/useDataset';
-import { formatDateTime } from '@/lib/format';
 
 export default function ReportsPage() {
   const params = useParams<{ id: string }>();
@@ -83,9 +82,6 @@ export default function ReportsPage() {
                 <MarkdownBlock key={index} block={block} />
               ))}
             </article>
-            <p className="mt-8 border-t border-line pt-4 text-2xs text-ink-subtle">
-              Gerado em {formatDateTime(report.data.generated_at)}.
-            </p>
           </CardContent>
         </Card>
       )}

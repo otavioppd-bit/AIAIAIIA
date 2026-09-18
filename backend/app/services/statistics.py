@@ -351,6 +351,45 @@ def _bucket_end(start: pd.Timestamp, freq: str) -> pd.Timestamp:
     return start + pd.tseries.frequencies.to_offset(freq)
 
 
+def _bucket_coverage(
+    start: pd.Timestamp, ts_min: pd.Timestamp, ts_max: pd.Timestamp, freq: str
+) -> float:
+    """How much of the bucket beginning at `start` the data actually spans."""
+    end = _bucket_end(start, freq)
+    span = (end - start).total_seconds()
+    if span <= 0:
+        return 1.0
+    # Date-only data stamps every record at midnight, so a single-day bucket
+    # would otherwise measure zero coverage.
+    if span <= 86400:
+        return 1.0
+    covered = (min(end, ts_max) - max(start, ts_min)).total_seconds()
+    return max(0.0, covered / span)
+
+
+def partial_boundary_periods(timestamps: pd.Series, grain: str) -> list[pd.Timestamp]:
+    """The edge buckets of `timestamps` that the data does not fully span.
+
+    The same rule `resample_series` trims by, exposed so that *any* time-grain
+    aggregation can drop a half-finished month rather than draw it as a
+    collapse. Returns bucket start timestamps, never more than the two edges,
+    and nothing at all unless enough buckets remain to still be a series.
+    """
+    parsed = pd.to_datetime(timestamps, errors="coerce").dropna()
+    if parsed.empty:
+        return []
+
+    freq = _GRAIN_FREQ.get(grain, "MS")
+    occupied = pd.Series(1, index=pd.DatetimeIndex(parsed)).resample(freq).sum()
+    occupied = occupied[occupied > 0]
+    if occupied.size < 4:
+        return []
+
+    ts_min, ts_max = parsed.min(), parsed.max()
+    edges = [occupied.index[0], occupied.index[-1]]
+    return [start for start in edges if _bucket_coverage(start, ts_min, ts_max, freq) < 0.9]
+
+
 def _trim_partial_periods(
     series: pd.Series, ts_min: pd.Timestamp, ts_max: pd.Timestamp, freq: str
 ) -> tuple[pd.Series, list[str]]:
@@ -360,18 +399,7 @@ def _trim_partial_periods(
         return series, notes
 
     def coverage(start: pd.Timestamp) -> float:
-        end = _bucket_end(start, freq)
-        span = (end - start).total_seconds()
-        if span <= 0:
-            return 1.0
-        covered_start = max(start, ts_min)
-        covered_end = min(end, ts_max)
-        # Date-only data stamps every record at midnight, so a single-day
-        # bucket would otherwise measure zero coverage.
-        covered = (covered_end - covered_start).total_seconds()
-        if span <= 86400:
-            return 1.0
-        return max(0.0, covered / span)
+        return _bucket_coverage(start, ts_min, ts_max, freq)
 
     drop_first = coverage(series.index[0]) < 0.9
     drop_last = coverage(series.index[-1]) < 0.9
